@@ -14,13 +14,15 @@ class CastleEscapeEnv(gym.Env):
         self.goal_room = (4, 4)
         self.randomise_counter = 0
 
-        # Track health as an integer: agent starts with 3 hits allowed.
-        self.initial_health = 3
+        # Define health states
+        self.health_states = ['Full', 'Injured', 'Critical']
+        self.health_state_to_int = {'Full': 2, 'Injured': 1, 'Critical': 0}
+        self.int_to_health_state = {2: 'Full', 1: 'Injured', 0: 'Critical'}
 
         # Rewards
         self.rewards = {
             'goal': 10000,
-            'wall_hit': -1000  # Penalty for striking a wall
+            'wall_hit': -1000
         }
 
         # Only movement actions are available.
@@ -30,8 +32,8 @@ class CastleEscapeEnv(gym.Env):
         # Observation space includes player's position, wall indicator, and health.
         obs_space_dict = {
             'player_position': spaces.Tuple((spaces.Discrete(self.grid_size), spaces.Discrete(self.grid_size))),
-            'wall_in_cell': spaces.Discrete(2),  # 0: False, 1: True
-            'player_health': spaces.Discrete(self.initial_health + 1)  # Values 0,1,2,3
+            'wall_in_cell': spaces.Discrete(2),
+            'player_health': spaces.Discrete(len(self.health_states)),
         }
         self.observation_space = spaces.Dict(obs_space_dict)
 
@@ -53,7 +55,7 @@ class CastleEscapeEnv(gym.Env):
         """Resets the game to the initial state."""
         self.current_state = {
             'player_position': (0, 0),
-            'player_health': self.initial_health
+            'player_health': 'Full'
         }
         self.wall_positions = self.randomise_walls()
         return self.get_observation(), 0, False, {}
@@ -63,16 +65,15 @@ class CastleEscapeEnv(gym.Env):
         obs = {
             'player_position': self.current_state['player_position'],
             'wall_in_cell': wall_in_cell,
-            'player_health': self.current_state['player_health']
+            'player_health': self.health_state_to_int[self.current_state['player_health']]
         }
         return obs
 
     def is_terminal(self):
         # Reaching the goal is victory.
-        if self.current_state['player_position'] == self.goal_room:
+        if self.current_state['player_position'] == self.goal_room:  # Reaching the goal means victory
             return 'goal'
-        # Game over (defeat) if health drops to 0.
-        if self.current_state['player_health'] <= 0:
+        if self.current_state['player_health'] == 'Critical':  # Losing health 3 times results in defeat
             return 'defeat'
         return False
 
@@ -101,7 +102,10 @@ class CastleEscapeEnv(gym.Env):
 
             # If new position is a wall, decrement health.
             if self.current_state['player_position'] in self.wall_positions:
-                self.current_state['player_health'] -= 1
+                if self.current_state['player_health'] == 'Full':
+                    self.current_state['player_health'] = 'Injured'
+                elif self.current_state['player_health'] == 'Injured':
+                    self.current_state['player_health'] = 'Critical'
                 message = f"Hit a wall at {self.current_state['player_position']}! Health now {self.current_state['player_health']}."
                 return message, self.rewards['wall_hit']
             return f"Moved to {self.current_state['player_position']}", 0
@@ -110,6 +114,7 @@ class CastleEscapeEnv(gym.Env):
 
     def step(self, action):
         """Performs one step in the environment."""
+        # Convert string action to index if needed.
         if isinstance(action, str):
             action = self.actions.index(action)
 
@@ -128,6 +133,7 @@ class CastleEscapeEnv(gym.Env):
             result += f" You've reached the goal! {self.rewards['goal']} points!"
         elif terminal_state == 'defeat':
             done = True
+            reward += self.rewards['wall_hit']
             result += " You've been defeated!"
 
         observation = self.get_observation()
@@ -135,8 +141,9 @@ class CastleEscapeEnv(gym.Env):
         return observation, reward, done, info
 
     def render(self, mode='human'):
-        """Prints the current state."""
-        print(f"Player position: {self.current_state['player_position']}, Health: {self.current_state['player_health']}")
+        """Renders the current state."""
+        print(
+            f"Player position: {self.current_state['player_position']}, Health: {self.current_state['player_health']}")
         print(f"Walls at: {self.wall_positions}")
 
     def close(self):
