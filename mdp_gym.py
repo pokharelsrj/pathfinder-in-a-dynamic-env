@@ -60,6 +60,21 @@ class CastleEscapeEnv(gym.Env):
         self.wall_positions = self.randomise_walls()
         return self.get_observation(), 0, False, {}
 
+    def move_player_to_random_adjacent(self):
+        """Move player to a random adjacent cell without going out of bounds"""
+        x, y = self.current_state['player_position']
+        directions = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+
+        # Filter out-of-bounds positions
+        adjacent_positions = [
+            pos for pos in directions
+            if 0 <= pos[0] < self.grid_size and 0 <= pos[1] < self.grid_size
+        ]
+
+        # Move player to a random adjacent position
+        if adjacent_positions:
+            self.current_state['player_position'] = random.choice(adjacent_positions)
+
     def get_observation(self):
         wall_in_cell = 1 if self.current_state['player_position'] in self.wall_positions else 0
         obs = {
@@ -106,6 +121,7 @@ class CastleEscapeEnv(gym.Env):
                     self.current_state['player_health'] = 'Injured'
                 elif self.current_state['player_health'] == 'Injured':
                     self.current_state['player_health'] = 'Critical'
+                self.move_player_to_random_adjacent()
                 message = f"Hit a wall at {self.current_state['player_position']}! Health now {self.current_state['player_health']}."
                 return message, self.rewards['wall_hit']
             return f"Moved to {self.current_state['player_position']}", 0
