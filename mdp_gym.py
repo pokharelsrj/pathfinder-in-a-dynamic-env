@@ -9,9 +9,9 @@ class CastleEscapeEnv(gym.Env):
 
     def __init__(self):
         super(CastleEscapeEnv, self).__init__()
-        self.grid_size = 5
+        self.grid_size = 10
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
-        self.goal_room = (4, 4)
+        self.goal_room = (9, 9)
         self.randomise_counter = 0
 
         # Define health states
@@ -38,14 +38,17 @@ class CastleEscapeEnv(gym.Env):
         self.observation_space = spaces.Dict(obs_space_dict)
 
         # Walls configuration
-        self.num_walls = 3
+        self.num_walls = 25
         self.wall_positions = []
 
         self.reset()
 
     def randomise_walls(self):
-        # Exclude start and goal positions.
-        available_positions = [pos for pos in self.rooms if pos not in [(0, 0), self.goal_room]]
+        # Exclude start, goal, and the player's current position.
+        available_positions = [
+            pos for pos in self.rooms
+            if pos not in [(0, 0), self.goal_room, self.current_state['player_position']]
+        ]
         if len(available_positions) < self.num_walls:
             return available_positions
         else:
