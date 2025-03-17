@@ -9,9 +9,9 @@ class CastleEscapeEnv(gym.Env):
 
     def __init__(self):
         super(CastleEscapeEnv, self).__init__()
-        self.grid_size = 8
+        self.grid_size = 10
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
-        self.goal_room = (7, 7)
+        self.goal_room = (self.grid_size - 1, self.grid_size - 1)
         self.randomise_counter = 0
 
         # Define health states
