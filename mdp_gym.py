@@ -38,7 +38,7 @@ class CastleEscapeEnv(gym.Env):
         self.observation_space = spaces.Dict(obs_space_dict)
 
         # Walls configuration
-        self.num_walls = 15
+        self.num_walls = 30
         self.wall_positions = []
 
         self.reset()
@@ -137,11 +137,6 @@ class CastleEscapeEnv(gym.Env):
         if isinstance(action, str):
             action = self.actions.index(action)
 
-        self.randomise_counter += 1
-        # Update wall positions every 3 moves.
-        if self.randomise_counter % 3 == 0:
-            self.wall_positions = self.randomise_walls()
-
         action_name = self.actions[action]
         result, reward = self.move_player(action_name)
         done = False
@@ -154,6 +149,11 @@ class CastleEscapeEnv(gym.Env):
             done = True
             reward += self.rewards['wall_hit']
             result += " You've been defeated!"
+
+        self.randomise_counter += 1
+        # Update wall positions every 3 moves.
+        if self.randomise_counter % 2 == 0:
+            self.wall_positions = self.randomise_walls()
 
         observation = self.get_observation()
         info = {'result': result, 'action': action_name}

@@ -88,6 +88,7 @@ def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
 #     print(total_reward)
 #     env.close()
 #
+#
 # random_movement()
 
 
