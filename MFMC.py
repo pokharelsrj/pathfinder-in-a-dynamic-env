@@ -26,7 +26,7 @@ env = game  # Gym environment already initialized within vis_gym.py
 
 def get_partial_observation(player_position, wall_positions, grid_size=5):
     """
-    Extract a 3x3 grid around the player's position.
+    Extract a 5x5 grid around the player's position.
     Walls are indicated with 1, free cells with 0.
     Out-of-bound cells are marked with -1.
 
@@ -36,21 +36,22 @@ def get_partial_observation(player_position, wall_positions, grid_size=5):
         grid_size (int): Size of the full grid (default=5).
 
     Returns:
-        tuple: A tuple of 3 tuples (each of length 3) representing the local grid.
+        tuple: A tuple of 5 tuples (each of length 5) representing the local grid.
     """
     x, y = player_position
     local_grid = []
-    for i in range(x - 1, x + 2):  # x-1, x, x+1
+    for i in range(x - 1, x + 2):  # actually generates: x-1, x, x+1
         row = []
-        for j in range(y - 1, y + 2):  # y-1, y, y+1
+        for j in range(y - 1, y + 2):  # actually generates: y-1, y, y+1
             if 0 <= i < grid_size and 0 <= j < grid_size:
-                # Mark cell as 1 if wall is present, else 0.
                 row.append(1 if (i, j) in wall_positions else 0)
             else:
-                # Out-of-bound cells: use -1 (or another distinct value)
-                row.append(-1)
+                row.append(1)  # note: out-of-bound cells are marked with 1 instead of -1
         local_grid.append(tuple(row))
     return tuple(local_grid)
+
+
+get_partial_observation((0, 0), [])
 
 
 def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
@@ -154,8 +155,9 @@ def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
 #
 #             Q_table[prev_state][index] = Q_opt_curr
 #             number_of_updates[prev_state][index] += 1
+#             no_of_moves += 1
 #
-#         print(current_ep, no_of_moves, reward)
+#         print(current_ep, no_of_moves, total_rewards, epsilon)
 #
 #         current_ep = current_ep + 1
 #         epsilon = epsilon * decay_rate
@@ -163,7 +165,7 @@ def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
 #     return Q_table
 #
 #
-# decay_rate = 0.999998
+# decay_rate = 0.999999
 #
 # Q_table = Q_learning(num_episodes=1000000, gamma=0.9, epsilon=1, decay_rate=decay_rate)  # Run Q-learning
 #
@@ -181,7 +183,7 @@ Q_table = np.load('Q_table.pickle', allow_pickle=True)
 # print(Q_table)
 i = 0
 total_reward = 0
-while i != 1000:
+while i != 50:
     obs, reward, done, info = env.reset()
     while not done:
         state = compute_partial_state_hash(env.current_state['player_position'],

@@ -9,9 +9,9 @@ class CastleEscapeEnv(gym.Env):
 
     def __init__(self):
         super(CastleEscapeEnv, self).__init__()
-        self.grid_size = 10
+        self.grid_size = 8
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
-        self.goal_room = (9, 9)
+        self.goal_room = (7, 7)
         self.randomise_counter = 0
 
         # Define health states
@@ -38,7 +38,7 @@ class CastleEscapeEnv(gym.Env):
         self.observation_space = spaces.Dict(obs_space_dict)
 
         # Walls configuration
-        self.num_walls = 25
+        self.num_walls = 15
         self.wall_positions = []
 
         self.reset()
@@ -120,10 +120,10 @@ class CastleEscapeEnv(gym.Env):
 
             # If new position is a wall, decrement health.
             if self.current_state['player_position'] in self.wall_positions:
-                if self.current_state['player_health'] == 'Full':
-                    self.current_state['player_health'] = 'Injured'
-                elif self.current_state['player_health'] == 'Injured':
-                    self.current_state['player_health'] = 'Critical'
+                # if self.current_state['player_health'] == 'Full':
+                #     self.current_state['player_health'] = 'Injured'
+                # elif self.current_state['player_health'] == 'Injured':
+                #     self.current_state['player_health'] = 'Critical'
                 self.move_player_to_random_adjacent()
                 message = f"Hit a wall at {self.current_state['player_position']}! Health now {self.current_state['player_health']}."
                 return message, self.rewards['wall_hit']

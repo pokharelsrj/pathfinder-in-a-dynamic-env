@@ -6,7 +6,7 @@ from mdp_gym import CastleEscapeEnv  # Import the updated CastleEscapeEnv (witho
 
 # Screen configuration
 WIDTH, HEIGHT = 600, 840  # 5x5 grid, each room is 120x120 pixels; extra space for console output
-GRID_SIZE = 10
+GRID_SIZE = 8
 CELL_SIZE = WIDTH // GRID_SIZE
 
 # Colors
