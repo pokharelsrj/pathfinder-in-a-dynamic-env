@@ -11,7 +11,6 @@ class CastleEscapeEnv(gym.Env):
         super(CastleEscapeEnv, self).__init__()
         self.grid_size = 10
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
-        self.goal_room = (self.grid_size - 1, self.grid_size - 1)
         self.randomise_counter = 0
 
         # Define health states
@@ -44,10 +43,10 @@ class CastleEscapeEnv(gym.Env):
         self.reset()
 
     def randomise_walls(self):
-        # Exclude start, goal, and the player's current position.
+        # Exclude the start, goal, and the player's current position.
         available_positions = [
             pos for pos in self.rooms
-            if pos not in [(0, 0), self.goal_room, self.current_state['player_position']]
+            if pos not in [self.goal_room, self.current_state['player_position']]
         ]
         if len(available_positions) < self.num_walls:
             return available_positions
@@ -55,11 +54,20 @@ class CastleEscapeEnv(gym.Env):
             return random.sample(available_positions, self.num_walls)
 
     def reset(self):
-        """Resets the game to the initial state."""
+        """Resets the game to the initial state with random start and goal positions."""
+        # Randomize starting position
+        start_pos = random.choice(self.rooms)
+        # Randomize goal room ensuring it's not the same as start
+        available_goals = [pos for pos in self.rooms if pos != start_pos]
+        goal_pos = random.choice(available_goals)
+
         self.current_state = {
-            'player_position': (0, 0),
+            'player_position': start_pos,
             'player_health': 'Full'
         }
+        self.goal_room = goal_pos
+        self.start_pos = start_pos
+
         self.wall_positions = self.randomise_walls()
         return self.get_observation(), 0, False, {}
 
@@ -89,9 +97,9 @@ class CastleEscapeEnv(gym.Env):
 
     def is_terminal(self):
         # Reaching the goal is victory.
-        if self.current_state['player_position'] == self.goal_room:  # Reaching the goal means victory
+        if self.current_state['player_position'] == self.goal_room:
             return 'goal'
-        if self.current_state['player_health'] == 'Critical':  # Losing health 3 times results in defeat
+        if self.current_state['player_health'] == 'Critical':
             return 'defeat'
         return False
 
@@ -118,12 +126,8 @@ class CastleEscapeEnv(gym.Env):
                 if adjacent_positions:
                     self.current_state['player_position'] = random.choice(adjacent_positions)
 
-            # If new position is a wall, decrement health.
+            # If new position is a wall, decrement health and move randomly.
             if self.current_state['player_position'] in self.wall_positions:
-                # if self.current_state['player_health'] == 'Full':
-                #     self.current_state['player_health'] = 'Injured'
-                # elif self.current_state['player_health'] == 'Injured':
-                #     self.current_state['player_health'] = 'Critical'
                 self.move_player_to_random_adjacent()
                 message = f"Hit a wall at {self.current_state['player_position']}! Health now {self.current_state['player_health']}."
                 return message, self.rewards['wall_hit']
@@ -151,7 +155,7 @@ class CastleEscapeEnv(gym.Env):
             result += " You've been defeated!"
 
         self.randomise_counter += 1
-        # Update wall positions every 3 moves.
+        # Update wall positions every 2 moves.
         if self.randomise_counter % 2 == 0:
             self.wall_positions = self.randomise_walls()
 
@@ -163,6 +167,7 @@ class CastleEscapeEnv(gym.Env):
         """Renders the current state."""
         print(
             f"Player position: {self.current_state['player_position']}, Health: {self.current_state['player_health']}")
+        print(f"Goal position: {self.goal_room}")
         print(f"Walls at: {self.wall_positions}")
 
     def close(self):

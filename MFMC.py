@@ -24,7 +24,7 @@ env = game  # Gym environment already initialized within vis_gym.py
 #
 #     return x * (5 * 2 * 5) + y * (2 * 5) + h * 5 + g
 
-def get_partial_observation(player_position, wall_positions, grid_size=5):
+def get_partial_observation(player_position, wall_positions, goal_state, grid_size=5):
     """
     Extract a 5x5 grid around the player's position.
     Walls are indicated with 1, free cells with 0.
@@ -40,18 +40,22 @@ def get_partial_observation(player_position, wall_positions, grid_size=5):
     """
     x, y = player_position
     local_grid = []
-    for i in range(x - 1, x + 2):  # actually generates: x-1, x, x+1
+    for i in range(x - 1, x + 2):  # generates: x-1, x, x+1
         row = []
-        for j in range(y - 1, y + 2):  # actually generates: y-1, y, y+1
+        for j in range(y - 1, y + 2):  # generates: y-1, y, y+1
             if 0 <= i < grid_size and 0 <= j < grid_size:
-                row.append(1 if (i, j) in wall_positions else 0)
+                # Check if the current cell matches the goal state
+                if (i, j) == goal_state:
+                    row.append(2)
+                else:
+                    row.append(1 if (i, j) in wall_positions else 0)
             else:
-                row.append(1)  # note: out-of-bound cells are marked with 1 instead of -1
+                row.append(1)  # out-of-bound cells are marked with 1
         local_grid.append(tuple(row))
     return tuple(local_grid)
 
 
-get_partial_observation((0, 0), [])
+# get_partial_observation((0, 0), [])
 
 
 def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
@@ -66,7 +70,7 @@ def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
     Returns:
         str: A SHA256 hash hex digest representing the 3x3 observation state.
     """
-    partial_obs = get_partial_observation(player_position, wall_positions, grid_size)
+    partial_obs = get_partial_observation(player_position, wall_positions, env.goal_room, grid_size)
     # Create a string representation that preserves the layout.
     state_str = str(partial_obs)
     return hashlib.sha256(state_str.encode('utf-8')).hexdigest()
