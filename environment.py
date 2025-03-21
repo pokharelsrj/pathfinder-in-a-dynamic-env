@@ -39,7 +39,7 @@ START_POS = (0, 0)
 GOAL_POS = (49, 49)
 HARD_OBSTACLE = 1
 SOFT_OBSTACLE = 2
-OBSTACLE_RATIO = 0.55  # 75% of the grid
+OBSTACLE_RATIO = 0.55  # 55% of the grid
 
 # Initialize Screen
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -83,10 +83,10 @@ def draw_grid():
                 pygame.draw.rect(screen, RED, rect)  # Soft Wall
             pygame.draw.rect(screen, BLACK, rect, 1)
 
-    # Display Health
-    font = pygame.font.Font(None, 30)
+    # Display Health, Uncomment if need to add extra complexity  
+    '''font = pygame.font.Font(None, 30)
     health_text = font.render(f"Health: {player_health}%", True, BLUE)
-    screen.blit(health_text, (10, HEIGHT - 30))
+    screen.blit(health_text, (10, HEIGHT - 30))'''
 
 # Handle Movement
 def move_player(dx, dy):
