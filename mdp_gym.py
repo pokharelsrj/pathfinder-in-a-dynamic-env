@@ -72,19 +72,20 @@ class CastleEscapeEnv(gym.Env):
         return self.get_observation(), 0, False, {}
 
     def move_player_to_random_adjacent(self):
-        """Move player to a random adjacent cell without going out of bounds"""
+        """Move player to a random adjacent cell without going out of bounds or into a wall."""
         x, y = self.current_state['player_position']
-        directions = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+        potential_moves = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
 
-        # Filter out-of-bounds positions
-        adjacent_positions = [
-            pos for pos in directions
-            if 0 <= pos[0] < self.grid_size and 0 <= pos[1] < self.grid_size
+        # Filter out-of-bounds positions and positions that contain a wall.
+        valid_moves = [
+            pos for pos in potential_moves
+            if 0 <= pos[0] < self.grid_size and 0 <= pos[1] < self.grid_size and pos not in self.wall_positions
         ]
 
-        # Move player to a random adjacent position
-        if adjacent_positions:
-            self.current_state['player_position'] = random.choice(adjacent_positions)
+        # Move player to a random adjacent valid position, if available.
+        if valid_moves:
+            self.current_state['player_position'] = random.choice(valid_moves)
+        # If no valid moves exist, the player stays in the same position.
 
     def get_observation(self):
         wall_in_cell = 1 if self.current_state['player_position'] in self.wall_positions else 0
