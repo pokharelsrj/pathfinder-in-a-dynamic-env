@@ -1,11 +1,9 @@
 import hashlib
-import random
-import time
 import pickle
 import numpy as np
 from vis_gym import *
 
-gui_flag = True  # Set to True to enable the game state visualization
+gui_flag = False  # Set to True to enable the game state visualization
 setup(GUI=gui_flag)
 env = game  # Gym environment already initialized within vis_gym.py
 
@@ -73,87 +71,87 @@ def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
     return hashlib.sha256(state_str.encode('utf-8')).hexdigest()
 
 
-# def Q_learning(num_episodes=200, gamma=0.9, epsilon=1, decay_rate=0.999):
-#     """
-#     Run Q-learning algorithm for a specified number of episodes.
-#
-#     Parameters:
-#     - num_episodes (int): Number of episodes to run.
-#     - gamma (float): Discount factor.
-#     - epsilon (float): Exploration rate.
-#     - decay_rate (float): Rate at which epsilon decays. Epsilon is decayed as epsilon = epsilon * decay_rate after each episode.
-#
-#     Returns:
-#     - Q_table (dict): Dictionary containing the Q-values for each state-action pair.
-#     """
-#     Q_table = {}
-#     number_of_updates = {}
-#
-#     current_ep = 0
-#     while current_ep != num_episodes:
-#         obs, reward, done, info = env.reset()
-#         total_rewards = 0
-#         no_of_moves = 0
-#         while not done:
-#             prev_state = compute_partial_state_hash(env.current_state['player_position'],
-#                                                     env.wall_positions,
-#                                                     env.grid_size)
-#             if Q_table.get(prev_state) is None or random.random() < epsilon:
-#                 action_to_take = random.choice(env.actions)
-#             else:
-#                 action_idx = np.argmax(Q_table[prev_state])
-#                 action_to_take = env.actions[action_idx]
-#
-#             obs, reward, done, info = env.step(action_to_take)
-#             total_rewards += reward
-#             state = compute_partial_state_hash(env.current_state['player_position'],
-#                                                env.wall_positions,
-#                                                env.grid_size)
-#             if gui_flag:
-#                 refresh(obs, reward, done, info)  # Update the game screen [GUI only]
-#
-#             action = info.get('action')
-#             index = env.actions.index(action)
-#
-#             if Q_table.get(state) is None:
-#                 Q_table.update({state: np.zeros(len(env.actions))})
-#
-#             if Q_table.get(prev_state) is None:
-#                 Q_table.update({prev_state: np.zeros(len(env.actions))})
-#
-#             if number_of_updates.get(state) is None:
-#                 number_of_updates.update({state: np.zeros(len(env.actions))})
-#
-#             if number_of_updates.get(prev_state) is None:
-#                 number_of_updates.update({prev_state: np.zeros(len(env.actions))})
-#
-#             Q_opt_prev = Q_table[prev_state][index]
-#             number_of_updates_prev = number_of_updates[prev_state][index]
-#
-#             eta = 1 / (1 + number_of_updates_prev)
-#             V_opt = np.max(Q_table[state])
-#
-#             Q_opt_curr = ((1 - eta) * Q_opt_prev) + eta * (reward + (gamma * V_opt))
-#
-#             Q_table[prev_state][index] = Q_opt_curr
-#             number_of_updates[prev_state][index] += 1
-#             no_of_moves += 1
-#
-#         print(current_ep, no_of_moves, total_rewards, epsilon)
-#
-#         current_ep = current_ep + 1
-#         epsilon = epsilon * decay_rate
-#
-#     return Q_table
-#
-#
-# decay_rate = 0.999999
-#
-# Q_table = Q_learning(num_episodes=1000000, gamma=0.9, epsilon=1, decay_rate=decay_rate)  # Run Q-learning
-#
-# # Save the Q-table dict to a file
-# with open('Q_table.pickle', 'wb') as handle:
-#     pickle.dump(Q_table, handle, protocol=pickle.HIGHEST_PROTOCOL)
+def Q_learning(num_episodes=200, gamma=0.9, epsilon=1, decay_rate=0.999):
+    """
+    Run Q-learning algorithm for a specified number of episodes.
+
+    Parameters:
+    - num_episodes (int): Number of episodes to run.
+    - gamma (float): Discount factor.
+    - epsilon (float): Exploration rate.
+    - decay_rate (float): Rate at which epsilon decays. Epsilon is decayed as epsilon = epsilon * decay_rate after each episode.
+
+    Returns:
+    - Q_table (dict): Dictionary containing the Q-values for each state-action pair.
+    """
+    Q_table = {}
+    number_of_updates = {}
+
+    current_ep = 0
+    while current_ep != num_episodes:
+        obs, reward, done, info = env.reset()
+        total_rewards = 0
+        no_of_moves = 0
+        while not done:
+            prev_state = compute_partial_state_hash(env.current_state['player_position'],
+                                                    env.wall_positions,
+                                                    env.grid_size)
+            if Q_table.get(prev_state) is None or random.random() < epsilon:
+                action_to_take = random.choice(env.actions)
+            else:
+                action_idx = np.argmax(Q_table[prev_state])
+                action_to_take = env.actions[action_idx]
+
+            obs, reward, done, info = env.step(action_to_take)
+            total_rewards += reward
+            state = compute_partial_state_hash(env.current_state['player_position'],
+                                               env.wall_positions,
+                                               env.grid_size)
+            if gui_flag:
+                refresh(obs, reward, done, info)  # Update the game screen [GUI only]
+
+            action = info.get('action')
+            index = env.actions.index(action)
+
+            if Q_table.get(state) is None:
+                Q_table.update({state: np.zeros(len(env.actions))})
+
+            if Q_table.get(prev_state) is None:
+                Q_table.update({prev_state: np.zeros(len(env.actions))})
+
+            if number_of_updates.get(state) is None:
+                number_of_updates.update({state: np.zeros(len(env.actions))})
+
+            if number_of_updates.get(prev_state) is None:
+                number_of_updates.update({prev_state: np.zeros(len(env.actions))})
+
+            Q_opt_prev = Q_table[prev_state][index]
+            number_of_updates_prev = number_of_updates[prev_state][index]
+
+            eta = 1 / (1 + number_of_updates_prev)
+            V_opt = np.max(Q_table[state])
+
+            Q_opt_curr = ((1 - eta) * Q_opt_prev) + eta * (reward + (gamma * V_opt))
+
+            Q_table[prev_state][index] = Q_opt_curr
+            number_of_updates[prev_state][index] += 1
+            no_of_moves += 1
+
+        print(current_ep, no_of_moves, total_rewards, epsilon)
+
+        current_ep = current_ep + 1
+        epsilon = epsilon * decay_rate
+
+    return Q_table
+
+
+decay_rate = 0.999999
+
+Q_table = Q_learning(num_episodes=1000000, gamma=0.9, epsilon=1, decay_rate=decay_rate)  # Run Q-learning
+
+# Save the Q-table dict to a file
+with open('Q_table.pickle', 'wb') as handle:
+    pickle.dump(Q_table, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 '''
 Uncomment the code below to play an episode using the saved Q-table. Useful for debugging/visualization.
@@ -161,26 +159,26 @@ Uncomment the code below to play an episode using the saved Q-table. Useful for 
 Comment before final submission or autograder may fail.
 '''
 
-Q_table = np.load('Q_table.pickle', allow_pickle=True)
-# print(Q_table)
-i = 0
-total_reward = 0
-while i != 50:
-    obs, reward, done, info = env.reset()
-    while not done:
-        state = compute_partial_state_hash(env.current_state['player_position'],
-                                           env.wall_positions,
-                                           env.grid_size)
-        action_index = np.argmax(Q_table[state])
-        action = env.actions[action_index]
-        obs, reward, done, info = env.step(action)
-        total_reward += reward
-        if gui_flag:
-            refresh(obs, reward, done, info)  # Update the game screen [GUI only]
-    i += 1
-    print(i)
-
-print(total_reward / 100000)
-
-# Close the
-env.close()  # Close the environment
+# Q_table = np.load('Q_table.pickle', allow_pickle=True)
+# # print(Q_table)
+# i = 0
+# total_reward = 0
+# while i != 50:
+#     obs, reward, done, info = env.reset()
+#     while not done:
+#         state = compute_partial_state_hash(env.current_state['player_position'],
+#                                            env.wall_positions,
+#                                            env.grid_size)
+#         action_index = np.argmax(Q_table[state])
+#         action = env.actions[action_index]
+#         obs, reward, done, info = env.step(action)
+#         total_reward += reward
+#         if gui_flag:
+#             refresh(obs, reward, done, info)  # Update the game screen [GUI only]
+#     i += 1
+#     print(i)
+#
+# print(total_reward / 100000)
+#
+# # Close the
+# env.close()  # Close the environment

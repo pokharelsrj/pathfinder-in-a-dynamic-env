@@ -55,10 +55,10 @@ class CastleEscapeEnv(gym.Env):
     def reset(self):
         """Resets the game to the initial state with random start and goal positions."""
         # Randomize starting position
-        start_pos = random.choice(self.rooms)
+        start_pos = (0, 0)
         # Randomize goal room ensuring it's not the same as start
         available_goals = [pos for pos in self.rooms if pos != start_pos]
-        goal_pos = random.choice(available_goals)
+        goal_pos = (9, 9)
 
         self.current_state = {
             'player_position': start_pos,
