@@ -56,9 +56,9 @@ class ReplayMemory(object):
 class DQN(nn.Module):
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
-        self.layer_1 = nn.Linear(n_observations, 128)
-        self.layer_2 = nn.Linear(128, 128)
-        self.layer_3 = nn.Linear(128, n_actions)
+        self.layer_1 = nn.Linear(n_observations, 6)
+        self.layer_2 = nn.Linear(6, 5)
+        self.layer_3 = nn.Linear(5, n_actions)
 
     def forward(self, x):
         x = F.relu(self.layer_1(x))
