@@ -5,6 +5,7 @@ from itertools import count
 from torch import nn, optim
 import torch.nn.functional as F
 import torch
+
 from vis_gym import *
 
 # Set up environment.
@@ -23,9 +24,9 @@ print("Using device:", device)
 # Hyperparameters and constants.
 BATCH_SIZE = 128
 GAMMA = 0.99
-EPS_START = 0.9
+EPS_START = 1
 EPS_END = 0.05
-EPS_DECAY = 1000
+EPS_DECAY = 0.4
 TAU = 0.005
 LR = 1e-4
 
@@ -93,6 +94,11 @@ def get_flattened_observation(env):
 # Helper function: Epsilon-greedy action selection.
 def select_action(state, policy_net, steps_done, env):
     sample = random.random()
+    if random.random() < EPS_START:
+        action = torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+    else:
+        action = policy_net(state).max(1).indices.view(1, 1)
+
     eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
     steps_done += 1
     if sample > eps_threshold:
@@ -144,7 +150,7 @@ def soft_update(target_net, policy_net, tau):
 
 # Training loop.
 def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes):
-    steps_done = 0
+    global EPS_START
     for ep in range(num_episodes):
         obs, reward, done, info = env.reset()
         flat_obs = get_flattened_observation(env)
@@ -152,7 +158,11 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes):
         episode_reward = 0
 
         for t in count():
-            action, steps_done = select_action(state, policy_net, steps_done, env)
+            if random.random() < EPS_START:
+                action = torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+            else:
+                action = policy_net(state).max(1).indices.view(1, 1)
+            # action, steps_done = select_action(state, policy_net, steps_done, env)
             obs, reward, done, info = env.step(action)
             reward_tensor = torch.tensor([reward], device=device)
             episode_reward += reward
@@ -172,6 +182,8 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes):
             if done:
                 print(f"Episode {ep + 1} finished after {t + 1} steps, Total Reward: {episode_reward}")
                 break
+
+        EPS_START = EPS_START * EPS_DECAY
 
     torch.save(policy_net.state_dict(), 'dqn_model.pth')
     print("Training complete. Model saved as dqn_model.pth.")
