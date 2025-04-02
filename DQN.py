@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from vis_gym import *
 
 # Set up environment.
-gui_flag = False
+gui_flag = True
 setup(GUI=gui_flag)
 env = game
 
@@ -31,6 +31,7 @@ EPS_END = 0.05
 EPS_DECAY = 3000
 TAU = 0.005
 LR = 1e-4
+EPSILON = 1.0
 
 # Environment info.
 n_actions = len(env.actions)
@@ -81,6 +82,7 @@ def cell_hash(cell):
     i, j = cell
     return i * 9 + j
 
+
 # Helper function: Process observation into a flattened 3x3 grid.
 def get_flattened_observation(env):
     player_position = env.current_state['player_position']
@@ -99,18 +101,27 @@ def get_flattened_observation(env):
 
 
 # Modified epsilon-greedy action selection that returns a flag for random actions.
-def select_action(state, policy_net, steps_done, env):
-    sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
-    steps_done += 1
-    if sample > eps_threshold:
-        with torch.no_grad():
-            action = policy_net(state).max(1).indices.view(1, 1)
-        is_random = False
-    else:
+# def select_action(state, policy_net, steps_done, env):
+#     sample = random.random()
+#     eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
+#     steps_done += 1
+#     if sample > eps_threshold:
+#         with torch.no_grad():
+#             action = policy_net(state).max(1).indices.view(1, 1)
+#         is_random = False
+#     else:
+#         action = torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+#         is_random = True
+#     return action, steps_done, eps_threshold, is_random
+
+def select_action(state, policy_net, env, epsilon):
+    if random.random() < epsilon:
         action = torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
         is_random = True
-    return action, steps_done, eps_threshold, is_random
+    else:
+        action = policy_net(state).max(1).indices.view(1, 1)
+        is_random = False
+    return action, is_random
 
 
 # Modified optimize_model that logs Q-value stats and gradient norms.
@@ -172,7 +183,7 @@ def soft_update(target_net, policy_net, tau):
 
 # Training loop with additional metric logging.
 def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, writer):
-    steps_done = 0
+    global EPSILON  # Use the global EPSILON variable.
     loss_history = deque(maxlen=100)
 
     for ep in range(num_episodes):
@@ -185,17 +196,17 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, wr
         episode_greedy_count = 0
         episode_action_counts = {i: 0 for i in range(n_actions)}
 
+        # Optionally, you can log the current epsilon for the episode.
+        writer.add_scalar("Epsilon/episode", EPSILON, ep)
+
         for t in count():
-            action, steps_done, eps_threshold, is_random = select_action(state, policy_net, steps_done, env)
+            action, is_random = select_action(state, policy_net, env, EPSILON)
             # Update action counts.
             if is_random:
                 episode_random_count += 1
             else:
                 episode_greedy_count += 1
             episode_action_counts[action.item()] += 1
-
-            # Log current epsilon.
-            writer.add_scalar("Epsilon/train", eps_threshold, steps_done)
 
             obs, reward, done, info = env.step(action)
             reward_tensor = torch.tensor([reward], device=device)
@@ -210,18 +221,17 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, wr
             memory.push(state, action, next_state, reward_tensor)
             state = next_state
 
-            loss_value = optimize_model(policy_net, target_net, optimizer, memory, steps_done, writer)
+            loss_value = optimize_model(policy_net, target_net, optimizer, memory, t, writer)
             if loss_value is not None:
-                writer.add_scalar("Loss/train", loss_value, steps_done)
+                writer.add_scalar("Loss/train", loss_value, t)
                 loss_history.append(loss_value)
                 moving_avg_loss = sum(loss_history) / len(loss_history)
-                writer.add_scalar("Loss/MovingAverage", moving_avg_loss, steps_done)
+                writer.add_scalar("Loss/MovingAverage", moving_avg_loss, t)
 
             soft_update(target_net, policy_net, TAU)
 
             if done:
                 episode_duration = time.time() - episode_start_time
-                # Log episode-level metrics.
                 writer.add_scalar("Reward/episode", episode_reward, ep)
                 writer.add_scalar("Episode/Length", t + 1, ep)
                 writer.add_scalar("Episode/Duration", episode_duration, ep)
@@ -231,7 +241,10 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, wr
                     f"Episode {ep + 1} finished after {t + 1} steps, Total Reward: {episode_reward}, Duration: {episode_duration:.2f}s")
                 break
 
-    # Append timestamp to the saved model file name.
+        # Decay epsilon after each episode.
+        EPSILON *= 0.999
+
+    # Save model with timestamp.
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     model_filename = f'dqn_model_{timestamp}.pth'
     torch.save(policy_net.state_dict(), model_filename)
@@ -262,7 +275,7 @@ def evaluate_agent(env, policy_net, num_eval_episodes=5):
 
 if __name__ == "__main__":
     # Set this flag to True to train the agent, or False to evaluate a saved policy.
-    TRAIN_MODE = True
+    TRAIN_MODE = False
 
     # Create a log directory with timestamp appended.
     timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -271,12 +284,12 @@ if __name__ == "__main__":
 
     if TRAIN_MODE:
         if torch.cuda.is_available() or torch.backends.mps.is_available():
-            num_episodes = 600
+            num_episodes = 800
         else:
             num_episodes = 50
         train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, writer)
         writer.close()
     else:
         # Load the saved model weights if available.
-        policy_net.load_state_dict(torch.load('dqn_model.pth', map_location=device))
+        policy_net.load_state_dict(torch.load('dqn_model_20250402-001737.pth', map_location=device))
         evaluate_agent(env, policy_net, num_eval_episodes=100)
