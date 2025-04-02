@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from vis_gym import *
 
 # Set up environment.
-gui_flag = True
+gui_flag = False
 setup(GUI=gui_flag)
 env = game
 
@@ -60,9 +60,9 @@ class ReplayMemory(object):
 class DQN(nn.Module):
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
-        self.layer_1 = nn.Linear(n_observations, 15)
-        self.layer_2 = nn.Linear(15, 10)
-        self.layer_3 = nn.Linear(10, n_actions)
+        self.layer_1 = nn.Linear(n_observations, 25)
+        self.layer_2 = nn.Linear(25, 15)
+        self.layer_3 = nn.Linear(15, n_actions)
 
     def forward(self, x):
         x = F.relu(self.layer_1(x))
@@ -242,7 +242,7 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, wr
                 break
 
         # Decay epsilon after each episode.
-        EPSILON *= 0.999
+        EPSILON *= 0.9997
 
     # Save model with timestamp.
     timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -284,12 +284,12 @@ if __name__ == "__main__":
 
     if TRAIN_MODE:
         if torch.cuda.is_available() or torch.backends.mps.is_available():
-            num_episodes = 800
+            num_episodes = 5000
         else:
             num_episodes = 50
         train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, writer)
         writer.close()
     else:
         # Load the saved model weights if available.
-        policy_net.load_state_dict(torch.load('dqn_model_20250402-001737.pth', map_location=device))
+        policy_net.load_state_dict(torch.load('dqn_model_20250402-145624.pth', map_location=device))
         evaluate_agent(env, policy_net, num_eval_episodes=100)
