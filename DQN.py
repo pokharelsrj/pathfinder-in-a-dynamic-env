@@ -1,14 +1,16 @@
 import math
+import random
 from collections import namedtuple, deque
 from itertools import count
 
 from torch import nn, optim
 import torch.nn.functional as F
 import torch
+from torch.utils.tensorboard import SummaryWriter
 from vis_gym import *
 
 # Set up environment.
-gui_flag = True
+gui_flag = False
 setup(GUI=gui_flag)
 env = game
 
@@ -100,13 +102,13 @@ def select_action(state, policy_net, steps_done, env):
             action = policy_net(state).max(1).indices.view(1, 1)
     else:
         action = torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
-    return action, steps_done
+    return action, steps_done, eps_threshold
 
 
 # Helper function: Optimize the model using a batch of transitions.
-def optimize_model(policy_net, target_net, optimizer, memory):
+def optimize_model(policy_net, target_net, optimizer, memory, global_step):
     if len(memory) < BATCH_SIZE:
-        return
+        return None
     transitions = memory.sample(BATCH_SIZE)
     batch = Transition(*zip(*transitions))
 
@@ -132,6 +134,8 @@ def optimize_model(policy_net, target_net, optimizer, memory):
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
 
+    return loss.item()
+
 
 # Helper function: Soft update the target network.
 def soft_update(target_net, policy_net, tau):
@@ -143,7 +147,7 @@ def soft_update(target_net, policy_net, tau):
 
 
 # Training loop.
-def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes):
+def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, writer):
     steps_done = 0
     for ep in range(num_episodes):
         obs, reward, done, info = env.reset()
@@ -152,7 +156,8 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes):
         episode_reward = 0
 
         for t in count():
-            action, steps_done = select_action(state, policy_net, steps_done, env)
+            action, steps_done, eps_threshold = select_action(state, policy_net, steps_done, env)
+            writer.add_scalar("Epsilon/train", eps_threshold, steps_done)
             obs, reward, done, info = env.step(action)
             reward_tensor = torch.tensor([reward], device=device)
             episode_reward += reward
@@ -166,11 +171,15 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes):
             memory.push(state, action, next_state, reward_tensor)
             state = next_state
 
-            optimize_model(policy_net, target_net, optimizer, memory)
+            loss_value = optimize_model(policy_net, target_net, optimizer, memory, steps_done)
+            if loss_value is not None:
+                writer.add_scalar("Loss/train", loss_value, steps_done)
+
             soft_update(target_net, policy_net, TAU)
 
             if done:
                 print(f"Episode {ep + 1} finished after {t + 1} steps, Total Reward: {episode_reward}")
+                writer.add_scalar("Reward/episode", episode_reward, ep)
                 break
 
     torch.save(policy_net.state_dict(), 'dqn_model.pth')
@@ -201,14 +210,16 @@ def evaluate_agent(env, policy_net, num_eval_episodes=5):
 
 if __name__ == "__main__":
     # Set this flag to True to train the agent, or False to evaluate a saved policy.
-    TRAIN_MODE = False
+    TRAIN_MODE = True
 
+    writer = SummaryWriter(log_dir='runs/dqn_experiment')
     if TRAIN_MODE:
         if torch.cuda.is_available() or torch.backends.mps.is_available():
             num_episodes = 600
         else:
             num_episodes = 50
-        train_agent(env, policy_net, target_net, optimizer, memory, num_episodes)
+        train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, writer)
+        writer.close()
     else:
         # Load the saved model weights if available.
         policy_net.load_state_dict(torch.load('dqn_model.pth', map_location=device))
