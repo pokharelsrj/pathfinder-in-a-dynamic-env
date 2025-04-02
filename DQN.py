@@ -1,5 +1,6 @@
 import math
 import random
+import time
 from collections import namedtuple, deque
 from itertools import count
 
@@ -27,13 +28,13 @@ BATCH_SIZE = 128
 GAMMA = 0.99
 EPS_START = 0.9
 EPS_END = 0.05
-EPS_DECAY = 1000
+EPS_DECAY = 3000
 TAU = 0.005
 LR = 1e-4
 
 # Environment info.
 n_actions = len(env.actions)
-n_observations = 9
+n_observations = 10
 
 # Transition tuple for replay memory.
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
@@ -58,9 +59,9 @@ class ReplayMemory(object):
 class DQN(nn.Module):
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
-        self.layer_1 = nn.Linear(n_observations, 6)
-        self.layer_2 = nn.Linear(6, 5)
-        self.layer_3 = nn.Linear(5, n_actions)
+        self.layer_1 = nn.Linear(n_observations, 15)
+        self.layer_2 = nn.Linear(15, 10)
+        self.layer_3 = nn.Linear(10, n_actions)
 
     def forward(self, x):
         x = F.relu(self.layer_1(x))
@@ -76,6 +77,10 @@ optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
 memory = ReplayMemory(10000)
 
 
+def cell_hash(cell):
+    i, j = cell
+    return i * 9 + j
+
 # Helper function: Process observation into a flattened 3x3 grid.
 def get_flattened_observation(env):
     player_position = env.current_state['player_position']
@@ -89,10 +94,11 @@ def get_flattened_observation(env):
                 flattened_grid.append(1 if (i, j) in wall_positions else 0)
             else:
                 flattened_grid.append(1)  # out-of-bound cells marked with 1
+    flattened_grid.append(cell_hash(env.goal_room))
     return tuple(flattened_grid)
 
 
-# Helper function: Epsilon-greedy action selection.
+# Modified epsilon-greedy action selection that returns a flag for random actions.
 def select_action(state, policy_net, steps_done, env):
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
@@ -100,13 +106,15 @@ def select_action(state, policy_net, steps_done, env):
     if sample > eps_threshold:
         with torch.no_grad():
             action = policy_net(state).max(1).indices.view(1, 1)
+        is_random = False
     else:
         action = torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
-    return action, steps_done, eps_threshold
+        is_random = True
+    return action, steps_done, eps_threshold, is_random
 
 
-# Helper function: Optimize the model using a batch of transitions.
-def optimize_model(policy_net, target_net, optimizer, memory, global_step):
+# Modified optimize_model that logs Q-value stats and gradient norms.
+def optimize_model(policy_net, target_net, optimizer, memory, global_step, writer):
     if len(memory) < BATCH_SIZE:
         return None
     transitions = memory.sample(BATCH_SIZE)
@@ -119,7 +127,14 @@ def optimize_model(policy_net, target_net, optimizer, memory, global_step):
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
 
-    state_action_values = policy_net(state_batch).gather(1, action_batch)
+    # Get Q-values for the current states.
+    q_values = policy_net(state_batch)
+    state_action_values = q_values.gather(1, action_batch)
+
+    # Log Q-value statistics.
+    writer.add_scalar("QValues/Mean", q_values.mean().item(), global_step)
+    writer.add_scalar("QValues/Max", q_values.max().item(), global_step)
+    writer.add_scalar("QValues/Std", q_values.std().item(), global_step)
 
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     with torch.no_grad():
@@ -131,13 +146,22 @@ def optimize_model(policy_net, target_net, optimizer, memory, global_step):
 
     optimizer.zero_grad()
     loss.backward()
+
+    # Compute and log the total gradient norm.
+    total_grad_norm = 0.0
+    for p in policy_net.parameters():
+        if p.grad is not None:
+            total_grad_norm += p.grad.data.norm(2).item() ** 2
+    total_grad_norm = total_grad_norm ** 0.5
+    writer.add_scalar("Gradient/Norm", total_grad_norm, global_step)
+
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
 
     return loss.item()
 
 
-# Helper function: Soft update the target network.
+# Soft update of the target network.
 def soft_update(target_net, policy_net, tau):
     target_dict = target_net.state_dict()
     policy_dict = policy_net.state_dict()
@@ -146,18 +170,33 @@ def soft_update(target_net, policy_net, tau):
     target_net.load_state_dict(target_dict)
 
 
-# Training loop.
+# Training loop with additional metric logging.
 def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, writer):
     steps_done = 0
+    loss_history = deque(maxlen=100)
+
     for ep in range(num_episodes):
+        episode_start_time = time.time()
         obs, reward, done, info = env.reset()
         flat_obs = get_flattened_observation(env)
         state = torch.tensor(flat_obs, dtype=torch.float32, device=device).unsqueeze(0)
         episode_reward = 0
+        episode_random_count = 0
+        episode_greedy_count = 0
+        episode_action_counts = {i: 0 for i in range(n_actions)}
 
         for t in count():
-            action, steps_done, eps_threshold = select_action(state, policy_net, steps_done, env)
+            action, steps_done, eps_threshold, is_random = select_action(state, policy_net, steps_done, env)
+            # Update action counts.
+            if is_random:
+                episode_random_count += 1
+            else:
+                episode_greedy_count += 1
+            episode_action_counts[action.item()] += 1
+
+            # Log current epsilon.
             writer.add_scalar("Epsilon/train", eps_threshold, steps_done)
+
             obs, reward, done, info = env.step(action)
             reward_tensor = torch.tensor([reward], device=device)
             episode_reward += reward
@@ -171,19 +210,32 @@ def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes, wr
             memory.push(state, action, next_state, reward_tensor)
             state = next_state
 
-            loss_value = optimize_model(policy_net, target_net, optimizer, memory, steps_done)
+            loss_value = optimize_model(policy_net, target_net, optimizer, memory, steps_done, writer)
             if loss_value is not None:
                 writer.add_scalar("Loss/train", loss_value, steps_done)
+                loss_history.append(loss_value)
+                moving_avg_loss = sum(loss_history) / len(loss_history)
+                writer.add_scalar("Loss/MovingAverage", moving_avg_loss, steps_done)
 
             soft_update(target_net, policy_net, TAU)
 
             if done:
-                print(f"Episode {ep + 1} finished after {t + 1} steps, Total Reward: {episode_reward}")
+                episode_duration = time.time() - episode_start_time
+                # Log episode-level metrics.
                 writer.add_scalar("Reward/episode", episode_reward, ep)
+                writer.add_scalar("Episode/Length", t + 1, ep)
+                writer.add_scalar("Episode/Duration", episode_duration, ep)
+                writer.add_scalar("ReplayMemory/Size", len(memory), ep)
+
+                print(
+                    f"Episode {ep + 1} finished after {t + 1} steps, Total Reward: {episode_reward}, Duration: {episode_duration:.2f}s")
                 break
 
-    torch.save(policy_net.state_dict(), 'dqn_model.pth')
-    print("Training complete. Model saved as dqn_model.pth.")
+    # Append timestamp to the saved model file name.
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    model_filename = f'dqn_model_{timestamp}.pth'
+    torch.save(policy_net.state_dict(), model_filename)
+    print(f"Training complete. Model saved as {model_filename}.")
 
 
 # Evaluation loop.
@@ -212,7 +264,11 @@ if __name__ == "__main__":
     # Set this flag to True to train the agent, or False to evaluate a saved policy.
     TRAIN_MODE = True
 
-    writer = SummaryWriter(log_dir='runs/dqn_experiment')
+    # Create a log directory with timestamp appended.
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    log_dir = f"runs/dqn_experiment_{timestamp}"
+    writer = SummaryWriter(log_dir=log_dir)
+
     if TRAIN_MODE:
         if torch.cuda.is_available() or torch.backends.mps.is_available():
             num_episodes = 600
