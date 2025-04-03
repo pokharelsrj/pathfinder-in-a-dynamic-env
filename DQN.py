@@ -5,6 +5,7 @@ Deep Q-Network (DQN) Implementation for Grid-Based Environment
 from collections import namedtuple, deque
 from itertools import count
 
+import random
 import torch
 import torch.nn.functional as F
 from torch import nn, optim
@@ -30,16 +31,16 @@ class Config:
 
     # DQN hyperparameters
     BATCH_SIZE = 256
-    GAMMA = 0.9
+    GAMMA = 0.99
     EPSILON_START = 1.0
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.9999
+    EPSILON_DECAY = 0.998
     TAU = 0.005
     LEARNING_RATE = 1e-4
 
     # Training settings
     REPLAY_MEMORY_SIZE = 50000
-    TRAIN_EPISODES = 5000
+    TRAIN_EPISODES = 800
     EVAL_EPISODES = 10
 
     # Data structures
@@ -53,7 +54,7 @@ def setup_environment():
     setup(GUI=Config.GUI_ENABLED)
     env = game
     n_actions = len(env.actions)
-    n_observations = 25
+    n_observations = env.grid_size ** 2
 
     print(f"Using device: {Config.DEVICE}")
 
@@ -67,16 +68,14 @@ class DQN(nn.Module):
 
     def __init__(self, input_size, output_size):
         super(DQN, self).__init__()
-        self.layer_1 = nn.Linear(input_size, 64)
-        self.layer_2 = nn.Linear(64, 32)
-        self.layer_3 = nn.Linear(32, 16)
-        self.layer_4 = nn.Linear(16, output_size)
+        self.layer_1 = nn.Linear(input_size, 10)
+        self.layer_2 = nn.Linear(10, 8)
+        self.layer_3 = nn.Linear(8, output_size)
 
     def forward(self, x):
         x = F.relu(self.layer_1(x))
         x = F.relu(self.layer_2(x))
-        x = F.relu(self.layer_3(x))
-        return self.layer_4(x)
+        return self.layer_3(x)
 
 
 # ================ REPLAY MEMORY ================
@@ -236,8 +235,8 @@ class DQNAgent:
 def train(agent, num_episodes, writer):
     """Train the agent"""
     # Track all losses for global metrics
-    all_losses = []
-    optimization_steps = 0
+    total_loss = 0.0
+    steps = 1
 
     for episode in range(num_episodes):
         # Reset environment
@@ -246,9 +245,7 @@ def train(agent, num_episodes, writer):
 
         # Episode tracking
         episode_reward = 0
-        episode_losses = []  # Track all losses for this episode
-        episode_step = 0
-        episode_optimization_count = 0  # Count of optimization steps in this episode
+        episode_step = 1
 
         # Log epsilon
         writer.add_scalar("Epsilon/episode", agent.epsilon, episode)
@@ -270,14 +267,12 @@ def train(agent, num_episodes, writer):
 
             # Optimize model and track loss
             loss_value = agent.optimize_model()
+            steps += 1
             if loss_value is not None:
-                episode_losses.append(loss_value)
-                all_losses.append(loss_value)
-                episode_optimization_count += 1
-                optimization_steps += 1
+                total_loss += loss_value
 
                 # Log step-wise loss (per optimization step)
-                writer.add_scalar("Loss/step", loss_value, optimization_steps)
+                writer.add_scalar("Loss/step", total_loss / steps, steps)
 
             # Update target network
             agent.soft_update_target_network()
@@ -286,22 +281,12 @@ def train(agent, num_episodes, writer):
             # Episode end handling
             if done:
                 # Calculate and log episode metrics
-                avg_episode_loss = sum(episode_losses) / len(episode_losses) if episode_losses else 0
-                writer.add_scalar("Reward/episode",episode_reward, episode)
-                writer.add_scalar("Step/episode",episode_step, episode)
-                writer.add_scalar("Loss/episode_avg", avg_episode_loss, episode)
-                writer.add_scalar("Loss/episode_total", sum(episode_losses), episode)
-                writer.add_scalar("OptimizationSteps/episode", episode_optimization_count, episode)
-                writer.add_scalar("ReplayMemory/Size", len(agent.memory), episode)
-
-                # Calculate global metrics
-                global_avg_loss = sum(all_losses) / len(all_losses) if all_losses else 0
-                writer.add_scalar("Loss/global_avg", global_avg_loss, episode)
+                writer.add_scalar("Reward/episode", episode_reward / episode_step, episode + 1)
+                writer.add_scalar("Step/episode", steps / (episode + 1), episode + 1)
+                writer.add_scalar("Loss/episode_avg", total_loss / (episode + 1), episode + 1)
 
                 print(
-                    f"Episode {episode}: {episode_step} steps, Reward: {episode_reward}, "
-                    f"Avg Loss: {avg_episode_loss:.6f}, Epsilon: {agent.epsilon:.4f}, "
-                    f"Opt Steps: {episode_optimization_count}"
+                    f"Episode {episode + 1}: {episode_step} steps, Reward: {episode_reward}, Epsilon: {agent.epsilon:.4f}"
                 )
                 break
 
