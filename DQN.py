@@ -235,6 +235,9 @@ class DQNAgent:
 
 def train(agent, num_episodes, writer):
     """Train the agent"""
+    # Track all losses for global metrics
+    all_losses = []
+    optimization_steps = 0
 
     for episode in range(num_episodes):
         # Reset environment
@@ -243,8 +246,9 @@ def train(agent, num_episodes, writer):
 
         # Episode tracking
         episode_reward = 0
-        episode_loss = 0.0
+        episode_losses = []  # Track all losses for this episode
         episode_step = 0
+        episode_optimization_count = 0  # Count of optimization steps in this episode
 
         # Log epsilon
         writer.add_scalar("Epsilon/episode", agent.epsilon, episode)
@@ -264,9 +268,16 @@ def train(agent, num_episodes, writer):
             agent.memory.push(state, action, next_state, reward_tensor)
             state = next_state
 
+            # Optimize model and track loss
             loss_value = agent.optimize_model()
             if loss_value is not None:
-                episode_loss += loss_value
+                episode_losses.append(loss_value)
+                all_losses.append(loss_value)
+                episode_optimization_count += 1
+                optimization_steps += 1
+
+                # Log step-wise loss (per optimization step)
+                writer.add_scalar("Loss/step", loss_value, optimization_steps)
 
             # Update target network
             agent.soft_update_target_network()
@@ -274,14 +285,24 @@ def train(agent, num_episodes, writer):
 
             # Episode end handling
             if done:
-                # Log statistics
-                writer.add_scalar("AverageReward/episode",
-                                  (episode_reward / episode_step if episode_step > 0 else 0),
-                                  episode)
+                # Calculate and log episode metrics
+                avg_episode_loss = sum(episode_losses) / len(episode_losses) if episode_losses else 0
+                writer.add_scalar("Reward/episode",episode_reward, episode)
+                writer.add_scalar("Step/episode",episode_step, episode)
+                writer.add_scalar("Loss/episode_avg", avg_episode_loss, episode)
+                writer.add_scalar("Loss/episode_total", sum(episode_losses), episode)
+                writer.add_scalar("OptimizationSteps/episode", episode_optimization_count, episode)
                 writer.add_scalar("ReplayMemory/Size", len(agent.memory), episode)
 
+                # Calculate global metrics
+                global_avg_loss = sum(all_losses) / len(all_losses) if all_losses else 0
+                writer.add_scalar("Loss/global_avg", global_avg_loss, episode)
+
                 print(
-                    f"Episode {episode}: {episode_step} steps, Reward: {episode_reward}, Epsilon: {agent.epsilon:.4f}")
+                    f"Episode {episode}: {episode_step} steps, Reward: {episode_reward}, "
+                    f"Avg Loss: {avg_episode_loss:.6f}, Epsilon: {agent.epsilon:.4f}, "
+                    f"Opt Steps: {episode_optimization_count}"
+                )
                 break
 
         # Decay epsilon
