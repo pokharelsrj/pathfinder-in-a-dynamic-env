@@ -20,7 +20,7 @@ class Config:
     """Core configuration parameters"""
 
     # Environment settings
-    GUI_ENABLED = False
+    GUI_ENABLED = True
 
     # Hardware settings
     DEVICE = torch.device(
@@ -34,13 +34,13 @@ class Config:
     GAMMA = 0.99
     EPSILON_START = 1.0
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.9
-    TAU = 0.005
-    LEARNING_RATE = 1e-4
+    EPSILON_DECAY = 0.99
+    TAU = 0.0005
+    LEARNING_RATE = 1e-5
 
     # Training settings
     REPLAY_MEMORY_SIZE = 50000
-    TRAIN_EPISODES = 1000
+    TRAIN_EPISODES = 700
     EVAL_EPISODES = 10
 
     # Data structures
@@ -326,7 +326,7 @@ def evaluate(agent, num_episodes):
 def main():
     """Main entry point"""
     # Setup
-    TRAIN_MODE = True
+    TRAIN_MODE = False
     env, n_actions, n_observations = setup_environment()
     agent = DQNAgent(env, n_observations, n_actions)
 
@@ -340,7 +340,7 @@ def main():
         writer.close()
         print(f"Training completed. Model saved to {model_path}")
     else:
-        agent.load_model('dqn_model.pth')
+        agent.load_model('dqn_model_20250404-011935.pth')
         evaluate(agent, Config.EVAL_EPISODES)
 
 

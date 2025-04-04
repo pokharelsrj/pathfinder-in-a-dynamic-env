@@ -38,7 +38,8 @@ class CastleEscapeEnv(gym.Env):
         self.observation_space = spaces.Dict(obs_space_dict)
 
         # Walls configuration
-        self.num_walls = 13
+        self.num_walls = int(0.3 * (self.grid_size ** 2))
+        print(self.num_walls)
         self.wall_positions = []
 
         self.reset()
@@ -60,7 +61,7 @@ class CastleEscapeEnv(gym.Env):
         start_pos = (0, 0)
         # Randomize goal room ensuring it's not the same as start
         available_goals = [pos for pos in self.rooms if pos != start_pos]
-        goal_pos = (4, 4)
+        goal_pos = (self.grid_size - 1, self.grid_size - 1)
         # random.choice(available_goals)
 
         self.current_state = {
