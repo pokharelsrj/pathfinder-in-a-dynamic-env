@@ -34,7 +34,7 @@ class Config:
     GAMMA = 0.99
     EPSILON_START = 1.0
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.99
+    EPSILON_DECAY = 0.999
     TAU = 0.0005
     LEARNING_RATE = 1e-5
 
@@ -70,12 +70,14 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         self.layer_1 = nn.Linear(input_size, 128)
         self.layer_2 = nn.Linear(128, 128)
-        self.layer_3 = nn.Linear(128, output_size)
+        self.layer_3 = nn.Linear(128, 128)
+        self.layer_4 = nn.Linear(128, output_size)
 
     def forward(self, x):
         x = F.relu(self.layer_1(x))
         x = F.relu(self.layer_2(x))
-        return self.layer_3(x)
+        x = F.relu(self.layer_3(x))
+        return self.layer_4(x)
 
 
 # ================ REPLAY MEMORY ================
@@ -337,7 +339,7 @@ def main():
         writer.close()
         print(f"Training completed. Model saved to {model_path}")
     else:
-        agent.load_model('dqn_model_20250404-011935.pth')
+        agent.load_model('dqn_model_20250404-014743.pth')
         evaluate(agent, Config.EVAL_EPISODES)
 
 

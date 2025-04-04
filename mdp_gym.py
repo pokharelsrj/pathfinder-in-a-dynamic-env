@@ -61,8 +61,9 @@ class CastleEscapeEnv(gym.Env):
         start_pos = (0, 0)
         # Randomize goal room ensuring it's not the same as start
         available_goals = [pos for pos in self.rooms if pos != start_pos]
-        goal_pos = (self.grid_size - 1, self.grid_size - 1)
+        goal_pos = random.choice(available_goals)
         # random.choice(available_goals)
+        # (self.grid_size - 1, self.grid_size - 1)
 
         self.current_state = {
             'player_position': start_pos,
