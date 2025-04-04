@@ -136,7 +136,7 @@ class DQNAgent:
         player_position = self.env.current_state['player_position']
         wall_positions = self.env.wall_positions
         grid_size = self.env.grid_size
-        i,j = self.env.goal_room
+        i, j = self.env.goal_room
         x, y = player_position
         flattened_grid = []
         for i in range(x - 1, x + 2):  # x-1, x, x+1
@@ -148,7 +148,6 @@ class DQNAgent:
         flattened_grid.append((i * (grid_size - 1)) + j)
 
         return tuple(flattened_grid)
-
 
     def get_state_tensor(self, observation=None):
         """Convert observation to tensor state"""
@@ -330,12 +329,10 @@ def main():
     env, n_actions, n_observations = setup_environment()
     agent = DQNAgent(env, n_observations, n_actions)
 
-    # Logging
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    log_dir = f"runs/dqn_{timestamp}"
-    writer = SummaryWriter(log_dir=log_dir)
-
     if TRAIN_MODE:
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        log_dir = f"runs/dqn_{timestamp}"
+        writer = SummaryWriter(log_dir=log_dir)
         model_path = train(agent, Config.TRAIN_EPISODES, writer)
         writer.close()
         print(f"Training completed. Model saved to {model_path}")
