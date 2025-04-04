@@ -31,8 +31,8 @@ class Config:
     )
 
     # CNN input settings
-    IMAGE_HEIGHT = 10  # Native grid size
-    IMAGE_WIDTH = 10  # Native grid size
+    IMAGE_HEIGHT = 8  # Native grid size
+    IMAGE_WIDTH = 8  # Native grid size
     # Removed stacked frames as we're using a 3-channel representation
 
     # DQN hyperparameters
@@ -40,13 +40,13 @@ class Config:
     GAMMA = 0.9
     EPSILON_START = 1
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.99
+    EPSILON_DECAY = 0.999
     TAU = 0.005
     LEARNING_RATE = 5e-4  # Slightly increased learning rate
 
     # Training settings
     REPLAY_MEMORY_SIZE = 10000
-    TRAIN_EPISODES = 700
+    TRAIN_EPISODES = 1300
     EVAL_EPISODES = 10
 
     # Data structures
@@ -99,10 +99,11 @@ class CNNDQN(nn.Module):
         # After pool1 (stride=1): 6x6
         # After conv2: 5x5
         # So the flattened size is 32 * 5 * 5 = 800
-        linear_input_size = 784
+        linear_input_size = 400
 
-        self.fc1 = nn.Linear(linear_input_size, 256)  # Reduced size of first FC layer
-        self.fc2 = nn.Linear(256, outputs)
+        self.fc1 = nn.Linear(linear_input_size, 128)  # Reduced size of first FC layer
+        self.fc2 = nn.Linear(128, 128)  # Reduced size of first FC layer
+        self.fc3 = nn.Linear(128, outputs)
 
         # Dropout for regularization
         self.dropout = nn.Dropout(0.2)
@@ -123,8 +124,9 @@ class CNNDQN(nn.Module):
         # Fully connected layers with dropout
         x = F.relu(self.fc1(x))
         x = self.dropout(x)
+        x = F.relu(self.fc2(x))
 
-        return self.fc2(x)
+        return self.fc3(x)
 
 
 # ================ REPLAY MEMORY ================
@@ -468,7 +470,7 @@ def main():
         writer.close()
         print(f"Training completed. Model saved to {model_path}")
     else:
-        agent.load_model('cnn_dqn_model_20250404-174434.pth')
+        agent.load_model('cnn_dqn_model_20250404-182737.pth')
         evaluate(agent, Config.EVAL_EPISODES)
 
 
