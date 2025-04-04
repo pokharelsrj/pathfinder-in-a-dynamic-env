@@ -18,10 +18,10 @@ from vis_gym import *
 # ================ CONFIGURATION ================
 
 class Config:
-    """Core configuration parameters"""
+    """Modified configuration parameters for 8x8 grid"""
 
     # Environment settings
-    GUI_ENABLED = False  # Must be enabled for CNN
+    GUI_ENABLED = True  # Can be False since we're using grid representation now
 
     # Hardware settings
     DEVICE = torch.device(
@@ -31,18 +31,18 @@ class Config:
     )
 
     # CNN input settings
-    IMAGE_HEIGHT = 64  # Reduced from 84
-    IMAGE_WIDTH = 64  # Reduced from 84
-    STACKED_FRAMES = 4  # Stack frames for temporal information
+    IMAGE_HEIGHT = 8  # Native grid size
+    IMAGE_WIDTH = 8  # Native grid size
+    # Removed stacked frames as we're using a 3-channel representation
 
     # DQN hyperparameters
-    BATCH_SIZE = 128
+    BATCH_SIZE = 64  # Reduced batch size for smaller network
     GAMMA = 0.9
     EPSILON_START = 0.1
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.9
+    EPSILON_DECAY = 0.95  # Slightly slower decay
     TAU = 0.005
-    LEARNING_RATE = 1e-4
+    LEARNING_RATE = 5e-4  # Slightly increased learning rate
 
     # Training settings
     REPLAY_MEMORY_SIZE = 10000
@@ -78,38 +78,52 @@ Simple fix for the CNN-DQN class - modify only the linear layer size
 
 
 class CNNDQN(nn.Module):
-    """CNN-Based Deep Q-Network Model with a single 3-channel grid input."""
+    """Modified CNN-Based Deep Q-Network Model for smaller 8x8 grid inputs."""
 
     def __init__(self, h, w, outputs):
         super(CNNDQN, self).__init__()
 
-        # Input now has 3 channels (walls, agent, goal)
+        # Input has 3 channels (walls, agent, goal)
         input_channels = 3
 
-        self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=3, stride=2)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        # Smaller kernel sizes and no stride for the smaller input grid
+        self.conv1 = nn.Conv2d(input_channels, 8, kernel_size=2, stride=1)
+        self.bn1 = nn.BatchNorm2d(8)  # Added batch normalization
 
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(8, 16, kernel_size=2, stride=1)
+        self.bn2 = nn.BatchNorm2d(16)  # Added batch normalization
 
-        self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1)
+        # Calculate the correct input size for the linear layer
+        # For 8x8 input with the above architecture:
+        # After conv1: 7x7
+        # After pool1 (stride=1): 6x6
+        # After conv2: 5x5
+        # So the flattened size is 32 * 5 * 5 = 800
+        linear_input_size = 400
 
-        # Adjust the linear layer input size based on your network’s architecture.
-        linear_input_size = 512  # This value may need adjustment based on input dimensions
-        self.fc1 = nn.Linear(linear_input_size, 512)
-        self.fc2 = nn.Linear(512, outputs)
+        self.fc1 = nn.Linear(linear_input_size, 256)  # Reduced size of first FC layer
+        self.fc2 = nn.Linear(256, outputs)
+
+        # Dropout for regularization
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = self.pool1(x)
+        # First convolutional layer
+        x = F.relu(self.bn1(self.conv1(x)))
 
-        x = F.relu(self.conv2(x))
-        x = self.pool2(x)
+        # Max pooling with stride=1 to avoid reducing dimensions too quickly
+        x = F.max_pool2d(x, kernel_size=2, stride=1)
 
-        x = F.relu(self.conv3(x))
+        # Second convolutional layer
+        x = F.relu(self.bn2(self.conv2(x)))
 
+        # Flatten
         x = x.view(x.size(0), -1)
+
+        # Fully connected layers with dropout
         x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+
         return self.fc2(x)
 
 
@@ -142,7 +156,6 @@ class CNNDQNAgent:
         self.env = env
         self.n_actions = n_actions
         self.epsilon = Config.EPSILON_START
-        self.frame_buffer = deque(maxlen=Config.STACKED_FRAMES)
 
         # Initialize networks
         self.policy_net = CNNDQN(Config.IMAGE_HEIGHT, Config.IMAGE_WIDTH, n_actions).to(Config.DEVICE)
@@ -235,20 +248,16 @@ class CNNDQNAgent:
         return grid_representation
 
     def get_env_tensor(self):
-        """Convert the processed observation into a tensor for the CNN."""
+        """Convert the processed observation into a tensor for the CNN.
+        This version works directly with the 8x8 grid without resizing.
+        """
         grid_matrix = self.process_observation()  # Shape: [3, grid_size, grid_size]
 
         # Convert to PyTorch tensor
         grid_tensor = torch.tensor(grid_matrix, dtype=torch.float32, device=Config.DEVICE)
 
-        # Optionally, resize/interpolate to match the desired CNN input dimensions
-        grid_tensor = torch.nn.functional.interpolate(
-            grid_tensor.unsqueeze(0),  # add temporary batch dimension
-            size=(Config.IMAGE_HEIGHT, Config.IMAGE_WIDTH),
-            mode='bilinear', align_corners=False
-        ).squeeze(0)  # remove temporary batch dimension
-
-        # Return with a batch dimension: [1, 3, H, W]
+        # No need to resize if we're using the native 8x8 grid
+        # Just add a batch dimension: [1, 3, 8, 8]
         return grid_tensor.unsqueeze(0)
 
     def get_state_tensor(self, reset=False):
@@ -446,25 +455,20 @@ def evaluate(agent, num_episodes):
 def main():
     """Main entry point"""
     # Setup
-    TRAIN_MODE = True
-
-    # Make sure GUI is enabled for screen capture
-    Config.GUI_ENABLED = False
+    TRAIN_MODE = False
 
     env, n_actions = setup_environment()
     agent = CNNDQNAgent(env, n_actions)
 
-    # Logging
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    log_dir = f"runs/cnn_dqn_{timestamp}"
-    writer = SummaryWriter(log_dir=log_dir)
-
     if TRAIN_MODE:
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        log_dir = f"runs/cnn_dqn_{timestamp}"
+        writer = SummaryWriter(log_dir=log_dir)
         model_path = train(agent, Config.TRAIN_EPISODES, writer)
         writer.close()
         print(f"Training completed. Model saved to {model_path}")
     else:
-        agent.load_model('cnn_dqn_model_20250404-165605.pth')
+        agent.load_model('cnn_dqn_model_20250404-172402.pth')
         evaluate(agent, Config.EVAL_EPISODES)
 
 
