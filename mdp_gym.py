@@ -8,7 +8,7 @@ class CastleEscapeEnv(gym.Env):
 
     def __init__(self):
         super(CastleEscapeEnv, self).__init__()
-        self.grid_size = 10
+        self.grid_size = 5
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
         self.randomise_counter = 0
 
@@ -36,7 +36,7 @@ class CastleEscapeEnv(gym.Env):
         self.observation_space = spaces.Dict(obs_space_dict)
 
         # Walls configuration
-        self.num_walls = 30
+        self.num_walls = 13
         self.wall_positions = []
 
         self.reset()
@@ -55,11 +55,11 @@ class CastleEscapeEnv(gym.Env):
     def reset(self):
         """Resets the game to the initial state with random start and goal positions."""
         # Randomize starting position
-        start_pos = random.choice(self.rooms)
+        start_pos = (0, 0)
         # Randomize goal room ensuring it's not the same as start
         available_goals = [pos for pos in self.rooms if pos != start_pos]
-        goal_pos = random.choice(available_goals)
-        #random.choice(available_goals)
+        goal_pos = (4, 4)
+        # random.choice(available_goals)
 
         self.current_state = {
             'player_position': start_pos,
