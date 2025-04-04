@@ -1,5 +1,7 @@
 import hashlib
 import pickle
+import random
+
 import numpy as np
 from vis_gym import *
 

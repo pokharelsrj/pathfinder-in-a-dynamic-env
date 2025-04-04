@@ -8,7 +8,9 @@ class CastleEscapeEnv(gym.Env):
 
     def __init__(self):
         super(CastleEscapeEnv, self).__init__()
-        self.grid_size = 5
+        self.start_pos = None
+        self.goal_room = None
+        self.grid_size = 8
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
         self.randomise_counter = 0
 

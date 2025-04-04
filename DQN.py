@@ -1,7 +1,7 @@
 """
 Deep Q-Network (DQN) Implementation for Grid-Based Environment
 """
-
+import hashlib
 from collections import namedtuple, deque
 from itertools import count
 
@@ -34,13 +34,13 @@ class Config:
     GAMMA = 0.99
     EPSILON_START = 1.0
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.9998
-    TAU = 0.0005
-    LEARNING_RATE = 1e-5
+    EPSILON_DECAY = 0.9
+    TAU = 0.005
+    LEARNING_RATE = 1e-4
 
     # Training settings
     REPLAY_MEMORY_SIZE = 50000
-    TRAIN_EPISODES = 5000
+    TRAIN_EPISODES = 1000
     EVAL_EPISODES = 10
 
     # Data structures
@@ -54,7 +54,7 @@ def setup_environment():
     setup(GUI=Config.GUI_ENABLED)
     env = game
     n_actions = len(env.actions)
-    n_observations = env.grid_size ** 2
+    n_observations = 10
 
     print(f"Using device: {Config.DEVICE}")
 
@@ -68,9 +68,9 @@ class DQN(nn.Module):
 
     def __init__(self, input_size, output_size):
         super(DQN, self).__init__()
-        self.layer_1 = nn.Linear(input_size, 8)
-        self.layer_2 = nn.Linear(8, 4)
-        self.layer_3 = nn.Linear(4 , output_size)
+        self.layer_1 = nn.Linear(input_size, 128)
+        self.layer_2 = nn.Linear(128, 128)
+        self.layer_3 = nn.Linear(128, output_size)
 
     def forward(self, x):
         x = F.relu(self.layer_1(x))
@@ -128,24 +128,27 @@ class DQNAgent:
             is_random = False
         return action, is_random
 
-    def process_observation(self):
-        """Process observation into flattened grid"""
-        grid_size = self.env.grid_size
-        player_pos = self.env.current_state['player_position']
-        flattened_grid = []
+    def cell_hash(cell):
+        i, j = cell
+        return i * 9 + j
 
-        for i in range(grid_size):
-            for j in range(grid_size):
-                if (i, j) == player_pos:
-                    flattened_grid.append(3)  # Player
-                elif (i, j) in self.env.wall_positions:
-                    flattened_grid.append(1)  # Wall
-                elif (i, j) == self.env.goal_room:
-                    flattened_grid.append(2)  # Goal
+    def process_observation(self):
+        player_position = self.env.current_state['player_position']
+        wall_positions = self.env.wall_positions
+        grid_size = self.env.grid_size
+        i,j = self.env.goal_room
+        x, y = player_position
+        flattened_grid = []
+        for i in range(x - 1, x + 2):  # x-1, x, x+1
+            for j in range(y - 1, y + 2):  # y-1, y, y+1
+                if 0 <= i < grid_size and 0 <= j < grid_size:
+                    flattened_grid.append(1 if (i, j) in wall_positions else 0)
                 else:
-                    flattened_grid.append(0)  # Empty
+                    flattened_grid.append(1)  # out-of-bound cells marked with 1
+        flattened_grid.append((i * (grid_size - 1)) + j)
 
         return tuple(flattened_grid)
+
 
     def get_state_tensor(self, observation=None):
         """Convert observation to tensor state"""
