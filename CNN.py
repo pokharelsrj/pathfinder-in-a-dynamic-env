@@ -14,6 +14,7 @@ import numpy as np
 import pygame
 import matplotlib.pyplot as plt
 from PIL import Image
+import torchvision.utils as vutils
 
 from vis_gym import *
 
@@ -41,7 +42,7 @@ class Config:
     # DQN hyperparameters
     BATCH_SIZE = 128
     GAMMA = 0.9
-    EPSILON_START = 1.0
+    EPSILON_START = 0.1
     EPSILON_MIN = 0.1
     EPSILON_DECAY = 0.9
     TAU = 0.005
@@ -81,7 +82,7 @@ Simple fix for the CNN-DQN class - modify only the linear layer size
 
 
 class CNNDQN(nn.Module):
-    """CNN-Based Deep Q-Network Model"""
+    """CNN-Based Deep Q-Network Model with intermediate activations saved for visualization"""
 
     def __init__(self, h, w, outputs):
         super(CNNDQN, self).__init__()
@@ -96,19 +97,49 @@ class CNNDQN(nn.Module):
         self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1)
 
         # Fixing the input size to 512 based on the error message
-        linear_input_size = 512  # Was 1024, changing to 512 as per error message
+        linear_input_size = 512  # Adjusted size as per your error message
 
         # Fully connected layers
         self.fc1 = nn.Linear(linear_input_size, 512)
         self.fc2 = nn.Linear(512, outputs)
 
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = self.pool1(x)
-        x = F.relu(self.conv2(x))
-        x = self.pool2(x)
-        x = F.relu(self.conv3(x))
+        # Optional: Enable/disable saving activations with a flag
+        self.save_activations = True
 
+    def save_activation(self, activation, layer_name):
+        """Save the activation maps of a layer as an image file using torchvision"""
+        # Create a timestamp so filenames don't collide
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        # Take the first image in the batch, shape: [channels, H, W]
+        activation_cpu = activation[0].detach().cpu()
+        # Unsqueeze to get shape [channels, 1, H, W] (each channel is a grayscale image)
+        activation_unsq = activation_cpu.unsqueeze(1)
+        # Create a grid of images. Adjust nrow as needed.
+        grid = vutils.make_grid(activation_unsq, nrow=8, normalize=True, scale_each=True)
+        filename = f"{layer_name}_activation_{timestamp}.png"
+        # Save the image grid to file
+        vutils.save_image(grid, filename)
+        print(f"Saved {layer_name} activation to {filename}")
+
+    def forward(self, x):
+        # First convolution and activation
+        x = F.relu(self.conv1(x))
+        if self.save_activations:
+            self.save_activation(x, "conv1")
+        x = self.pool1(x)
+
+        # Second convolution and activation
+        x = F.relu(self.conv2(x))
+        if self.save_activations:
+            self.save_activation(x, "conv2")
+        x = self.pool2(x)
+
+        # Third convolution and activation
+        x = F.relu(self.conv3(x))
+        if self.save_activations:
+            self.save_activation(x, "conv3")
+
+        # Flatten and pass through fully connected layers
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         return self.fc2(x)
@@ -364,6 +395,9 @@ def train(agent, num_episodes, writer):
             # Update target network
             agent.soft_update_target_network()
             episode_step += 1
+
+            if(episode_step == 2):
+                break
 
             # Episode end handling
             if done:
