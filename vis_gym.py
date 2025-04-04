@@ -32,8 +32,8 @@ screen = None
 game_ended = False
 action_results = [None, None, None, None, None]
 
-fps = 60
-sleeptime = 0.1
+fps = 10
+sleeptime = 0
 clock = None
 
 

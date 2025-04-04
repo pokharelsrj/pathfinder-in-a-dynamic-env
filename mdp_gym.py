@@ -10,7 +10,7 @@ class CastleEscapeEnv(gym.Env):
         super(CastleEscapeEnv, self).__init__()
         self.start_pos = None
         self.goal_room = None
-        self.grid_size = 8
+        self.grid_size = 5
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
         self.randomise_counter = 0
 
@@ -22,7 +22,8 @@ class CastleEscapeEnv(gym.Env):
         # Rewards
         self.rewards = {
             'goal': 10000,
-            'wall_hit': -1000
+            'wall_hit': -1000,
+            'step': 0
         }
 
         # Only movement actions are available.
@@ -61,7 +62,7 @@ class CastleEscapeEnv(gym.Env):
         start_pos = (0, 0)
         # Randomize goal room ensuring it's not the same as start
         available_goals = [pos for pos in self.rooms if pos != start_pos]
-        goal_pos = random.choice(available_goals)
+        goal_pos = (self.grid_size - 1, self.grid_size - 1)
         # random.choice(available_goals)
         # (self.grid_size - 1, self.grid_size - 1)
 
@@ -167,6 +168,7 @@ class CastleEscapeEnv(gym.Env):
         if self.randomise_counter % 2 == 0:
             self.wall_positions = self.randomise_walls()
 
+        reward += self.rewards['step']
         observation = self.get_observation()
         info = {'result': result, 'action': action_name}
         return observation, reward, done, info
