@@ -34,13 +34,13 @@ class Config:
     GAMMA = 0.99
     EPSILON_START = 1.0
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.998
-    TAU = 0.005
-    LEARNING_RATE = 1e-4
+    EPSILON_DECAY = 0.9998
+    TAU = 0.0005
+    LEARNING_RATE = 1e-5
 
     # Training settings
     REPLAY_MEMORY_SIZE = 50000
-    TRAIN_EPISODES = 800
+    TRAIN_EPISODES = 5000
     EVAL_EPISODES = 10
 
     # Data structures
@@ -68,9 +68,9 @@ class DQN(nn.Module):
 
     def __init__(self, input_size, output_size):
         super(DQN, self).__init__()
-        self.layer_1 = nn.Linear(input_size, 10)
-        self.layer_2 = nn.Linear(10, 8)
-        self.layer_3 = nn.Linear(8, output_size)
+        self.layer_1 = nn.Linear(input_size, 8)
+        self.layer_2 = nn.Linear(8, 4)
+        self.layer_3 = nn.Linear(4 , output_size)
 
     def forward(self, x):
         x = F.relu(self.layer_1(x))
@@ -177,23 +177,13 @@ class DQNAgent:
         # Get current Q values
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
-        # Compute target Q values using Double DQN approach
         next_state_values = torch.zeros(Config.BATCH_SIZE, device=Config.DEVICE)
-
-        if non_final_mask.sum() > 0:  # Only if there are non-final states
-            with torch.no_grad():
-                # Double DQN: use policy_net to select actions
-                next_action_indices = self.policy_net(non_final_next_states).max(1)[1].unsqueeze(1)
-                # Use target_net to evaluate those actions
-                next_state_values[non_final_mask] = self.target_net(
-                    non_final_next_states).gather(1, next_action_indices).squeeze(1)
+        next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0].detach()
 
         # Compute expected Q values
         expected_state_action_values = (next_state_values * Config.GAMMA) + reward_batch
 
-        # Compute loss
-        criterion = nn.MSELoss()
-        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
         # Optimize
         self.optimizer.zero_grad()
