@@ -11,10 +11,6 @@ import torch.nn.functional as F
 from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
-import pygame
-import matplotlib.pyplot as plt
-from PIL import Image
-import torchvision.utils as vutils
 
 from vis_gym import *
 
@@ -25,7 +21,7 @@ class Config:
     """Core configuration parameters"""
 
     # Environment settings
-    GUI_ENABLED = True  # Must be enabled for CNN
+    GUI_ENABLED = False  # Must be enabled for CNN
 
     # Hardware settings
     DEVICE = torch.device(
@@ -50,7 +46,7 @@ class Config:
 
     # Training settings
     REPLAY_MEMORY_SIZE = 10000
-    TRAIN_EPISODES = 1
+    TRAIN_EPISODES = 600
     EVAL_EPISODES = 10
 
     # Data structures
@@ -82,64 +78,36 @@ Simple fix for the CNN-DQN class - modify only the linear layer size
 
 
 class CNNDQN(nn.Module):
-    """CNN-Based Deep Q-Network Model with intermediate activations saved for visualization"""
+    """CNN-Based Deep Q-Network Model with a single 3-channel grid input."""
 
     def __init__(self, h, w, outputs):
         super(CNNDQN, self).__init__()
 
-        # CNN layers with more aggressive downsampling
-        self.conv1 = nn.Conv2d(Config.STACKED_FRAMES, 16, kernel_size=3, stride=2)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)  # Added pooling layer
+        # Input now has 3 channels (walls, agent, goal)
+        input_channels = 3
+
+        self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=3, stride=2)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)  # Added pooling layer
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1)
 
-        # Fixing the input size to 512 based on the error message
-        linear_input_size = 512  # Adjusted size as per your error message
-
-        # Fully connected layers
+        # Adjust the linear layer input size based on your network’s architecture.
+        linear_input_size = 512  # This value may need adjustment based on input dimensions
         self.fc1 = nn.Linear(linear_input_size, 512)
         self.fc2 = nn.Linear(512, outputs)
 
-        # Optional: Enable/disable saving activations with a flag
-        self.save_activations = True
-
-    def save_activation(self, activation, layer_name):
-        """Save the activation maps of a layer as an image file using torchvision"""
-        # Create a timestamp so filenames don't collide
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        # Take the first image in the batch, shape: [channels, H, W]
-        activation_cpu = activation[0].detach().cpu()
-        # Unsqueeze to get shape [channels, 1, H, W] (each channel is a grayscale image)
-        activation_unsq = activation_cpu.unsqueeze(1)
-        # Create a grid of images. Adjust nrow as needed.
-        grid = vutils.make_grid(activation_unsq, nrow=8, normalize=True, scale_each=True)
-        filename = f"{layer_name}_activation_{timestamp}.png"
-        # Save the image grid to file
-        vutils.save_image(grid, filename)
-        print(f"Saved {layer_name} activation to {filename}")
-
     def forward(self, x):
-        # First convolution and activation
         x = F.relu(self.conv1(x))
-        if self.save_activations:
-            self.save_activation(x, "conv1")
         x = self.pool1(x)
 
-        # Second convolution and activation
         x = F.relu(self.conv2(x))
-        if self.save_activations:
-            self.save_activation(x, "conv2")
         x = self.pool2(x)
 
-        # Third convolution and activation
         x = F.relu(self.conv3(x))
-        if self.save_activations:
-            self.save_activation(x, "conv3")
 
-        # Flatten and pass through fully connected layers
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         return self.fc2(x)
@@ -209,13 +177,6 @@ class CNNDQNAgent:
         # Convert to grayscale
         gray_screen = np.mean(pixels, axis=2).astype(np.uint8)
 
-        CNNDQNAgent.step_counter += 1
-
-        img = Image.fromarray(gray_screen.T)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"grayscale_image_{timestamp}_step{CNNDQNAgent.step_counter:06d}.png"
-        img.save(filename)
-
         # Resize to the desired dimensions
         surf = pygame.surfarray.make_surface(gray_screen)
         resized_surf = pygame.transform.scale(surf, (Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT))
@@ -242,18 +203,57 @@ class CNNDQNAgent:
         stacked_frames = torch.cat(list(self.frame_buffer), dim=0)
         return stacked_frames.unsqueeze(0)  # Add batch dimension
 
+    def process_observation(self):
+        """
+        Create a multi-channel grid representation:
+          - Channel 0: Walls (1 for wall, 0 otherwise)
+          - Channel 1: Agent (1 at the agent's position, 0 otherwise)
+          - Channel 2: Goal (1 at the goal position, 0 otherwise)
+        """
+        grid_size = self.env.grid_size
+
+        # Initialize empty grids for each channel
+        walls_channel = np.zeros((grid_size, grid_size), dtype=np.float32)
+        agent_channel = np.zeros((grid_size, grid_size), dtype=np.float32)
+        goal_channel = np.zeros((grid_size, grid_size), dtype=np.float32)
+
+        # Fill in the walls channel
+        for pos in self.env.wall_positions:
+            i, j = pos
+            walls_channel[i, j] = 1.0
+
+        # Mark the agent's position
+        agent_i, agent_j = self.env.current_state['player_position']
+        agent_channel[agent_i, agent_j] = 1.0
+
+        # Mark the goal position
+        goal_i, goal_j = self.env.goal_room
+        goal_channel[goal_i, goal_j] = 1.0
+
+        # Stack the channels: resulting shape will be [3, grid_size, grid_size]
+        grid_representation = np.stack([walls_channel, agent_channel, goal_channel], axis=0)
+        return grid_representation
+
+    def get_env_tensor(self):
+        """Convert the processed observation into a tensor for the CNN."""
+        grid_matrix = self.process_observation()  # Shape: [3, grid_size, grid_size]
+
+        # Convert to PyTorch tensor
+        grid_tensor = torch.tensor(grid_matrix, dtype=torch.float32, device=Config.DEVICE)
+
+        # Optionally, resize/interpolate to match the desired CNN input dimensions
+        grid_tensor = torch.nn.functional.interpolate(
+            grid_tensor.unsqueeze(0),  # add temporary batch dimension
+            size=(Config.IMAGE_HEIGHT, Config.IMAGE_WIDTH),
+            mode='bilinear', align_corners=False
+        ).squeeze(0)  # remove temporary batch dimension
+
+        # Return with a batch dimension: [1, 3, H, W]
+        return grid_tensor.unsqueeze(0)
+
     def get_state_tensor(self, reset=False):
-        """Get the current state as a tensor of stacked frames"""
-        screen = self.get_screen()
-        if screen is None:
-            return None
-
-        state = self.stack_frames(screen, reset)
-
-        # Debug info to verify tensor shape
-        # print(f"State tensor shape: {state.shape}")
-
-        return state
+        """Obtain the current state as a tensor without frame stacking."""
+        return self.get_env_tensor()
 
     def optimize_model(self):
         """Perform one step of optimization with Double DQN implementation"""
@@ -337,27 +337,23 @@ class CNNDQNAgent:
 def train(agent, num_episodes, writer):
     """Train the agent"""
     # Track all losses for global metrics
-    all_losses = []
-    optimization_steps = 0
+    total_loss = 0.0
+    steps = 1
 
     for episode in range(num_episodes):
         # Reset environment
         obs, reward, done, info = agent.env.reset()
 
-        # Refresh to get the screen ready
-        refresh(obs, reward, done, info)
-
         # Get initial state
         state = agent.get_state_tensor(reset=True)
+
         if state is None:
             print("Warning: Could not get initial screen. Ensure GUI is enabled.")
             continue
 
         # Episode tracking
         episode_reward = 0
-        episode_losses = []
-        episode_step = 0
-        episode_optimization_count = 0
+        episode_step = 1
 
         # Log epsilon
         writer.add_scalar("Epsilon/episode", agent.epsilon, episode)
@@ -369,7 +365,7 @@ def train(agent, num_episodes, writer):
             obs, reward, done, info = agent.env.step(action)
 
             # Update display using vis_gym's refresh function
-            refresh(obs, reward, done, info)
+            # refresh(obs, reward, done, info)
 
             reward_tensor = torch.tensor([reward], device=Config.DEVICE)
             episode_reward += reward
@@ -383,41 +379,26 @@ def train(agent, num_episodes, writer):
 
             # Optimize model and track loss
             loss_value = agent.optimize_model()
+            steps += 1
             if loss_value is not None:
-                episode_losses.append(loss_value)
-                all_losses.append(loss_value)
-                episode_optimization_count += 1
-                optimization_steps += 1
+                total_loss += loss_value
 
                 # Log step-wise loss (per optimization step)
-                writer.add_scalar("Loss/step", loss_value, optimization_steps)
+                writer.add_scalar("Loss/step", total_loss / steps, steps)
 
             # Update target network
             agent.soft_update_target_network()
             episode_step += 1
 
-            if(episode_step == 2):
-                break
-
             # Episode end handling
             if done:
                 # Calculate and log episode metrics
-                avg_episode_loss = sum(episode_losses) / len(episode_losses) if episode_losses else 0
-                writer.add_scalar("Reward/episode", episode_reward, episode)
-                writer.add_scalar("Step/episode", episode_step, episode)
-                writer.add_scalar("Loss/episode_avg", avg_episode_loss, episode)
-                writer.add_scalar("Loss/episode_total", sum(episode_losses), episode)
-                writer.add_scalar("OptimizationSteps/episode", episode_optimization_count, episode)
-                writer.add_scalar("ReplayMemory/Size", len(agent.memory), episode)
-
-                # Calculate global metrics
-                global_avg_loss = sum(all_losses) / len(all_losses) if all_losses else 0
-                writer.add_scalar("Loss/global_avg", global_avg_loss, episode)
+                writer.add_scalar("Reward/episode", episode_reward / episode_step, episode + 1)
+                writer.add_scalar("Step/episode", steps / (episode + 1), episode + 1)
+                writer.add_scalar("Loss/episode_avg", total_loss / (episode + 1), episode + 1)
 
                 print(
-                    f"Episode {episode}: {episode_step} steps, Reward: {episode_reward}, "
-                    f"Avg Loss: {avg_episode_loss:.6f}, Epsilon: {agent.epsilon:.4f}, "
-                    f"Opt Steps: {episode_optimization_count}"
+                    f"Episode {episode + 1}: {episode_step} steps, Reward: {episode_reward}, Epsilon: {agent.epsilon:.4f}"
                 )
                 break
 
@@ -468,7 +449,7 @@ def main():
     TRAIN_MODE = True
 
     # Make sure GUI is enabled for screen capture
-    Config.GUI_ENABLED = True
+    Config.GUI_ENABLED = False
 
     env, n_actions = setup_environment()
     agent = CNNDQNAgent(env, n_actions)
@@ -483,7 +464,7 @@ def main():
         writer.close()
         print(f"Training completed. Model saved to {model_path}")
     else:
-        agent.load_model('cnn_dqn_model.pth')
+        agent.load_model('cnn_dqn_model_20250404-165605.pth')
         evaluate(agent, Config.EVAL_EPISODES)
 
 

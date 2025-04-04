@@ -33,7 +33,7 @@ game_ended = False
 action_results = [None, None, None, None, None]
 
 fps = 10
-sleeptime = 0
+sleeptime = 0.1
 clock = None
 
 
