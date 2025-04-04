@@ -31,22 +31,22 @@ class Config:
     )
 
     # CNN input settings
-    IMAGE_HEIGHT = 8  # Native grid size
-    IMAGE_WIDTH = 8  # Native grid size
+    IMAGE_HEIGHT = 10  # Native grid size
+    IMAGE_WIDTH = 10  # Native grid size
     # Removed stacked frames as we're using a 3-channel representation
 
     # DQN hyperparameters
     BATCH_SIZE = 64  # Reduced batch size for smaller network
     GAMMA = 0.9
-    EPSILON_START = 0.1
+    EPSILON_START = 1
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.95  # Slightly slower decay
+    EPSILON_DECAY = 0.99
     TAU = 0.005
     LEARNING_RATE = 5e-4  # Slightly increased learning rate
 
     # Training settings
     REPLAY_MEMORY_SIZE = 10000
-    TRAIN_EPISODES = 600
+    TRAIN_EPISODES = 700
     EVAL_EPISODES = 10
 
     # Data structures
@@ -99,7 +99,7 @@ class CNNDQN(nn.Module):
         # After pool1 (stride=1): 6x6
         # After conv2: 5x5
         # So the flattened size is 32 * 5 * 5 = 800
-        linear_input_size = 400
+        linear_input_size = 784
 
         self.fc1 = nn.Linear(linear_input_size, 256)  # Reduced size of first FC layer
         self.fc2 = nn.Linear(256, outputs)
@@ -468,7 +468,7 @@ def main():
         writer.close()
         print(f"Training completed. Model saved to {model_path}")
     else:
-        agent.load_model('cnn_dqn_model_20250404-172402.pth')
+        agent.load_model('cnn_dqn_model_20250404-174434.pth')
         evaluate(agent, Config.EVAL_EPISODES)
 
 
