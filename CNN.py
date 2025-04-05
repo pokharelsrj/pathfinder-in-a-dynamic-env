@@ -21,7 +21,7 @@ class Config:
     """Modified configuration parameters for 8x8 grid"""
 
     # Environment settings
-    GUI_ENABLED = True  # Can be False since we're using grid representation now
+    GUI_ENABLED = False  # Can be False since we're using grid representation now
 
     # Hardware settings
     DEVICE = torch.device(
@@ -40,14 +40,14 @@ class Config:
     GAMMA = 0.9
     EPSILON_START = 1
     EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.999
+    EPSILON_DECAY = 0.9995
     TAU = 0.005
     LEARNING_RATE = 5e-4  # Slightly increased learning rate
 
     # Training settings
     REPLAY_MEMORY_SIZE = 10000
-    TRAIN_EPISODES = 1300
-    EVAL_EPISODES = 10
+    TRAIN_EPISODES = 3000
+    EVAL_EPISODES = 100
 
     # Data structures
     Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
@@ -457,7 +457,7 @@ def evaluate(agent, num_episodes):
 def main():
     """Main entry point"""
     # Setup
-    TRAIN_MODE = False
+    TRAIN_MODE = True
 
     env, n_actions = setup_environment()
     agent = CNNDQNAgent(env, n_actions)
