@@ -9,7 +9,7 @@ game = CastleEscapeEnv()
 # Screen configuration
 WIDTH, HEIGHT = 600, 840  # 5x5 grid, each room is 120x120 pixels; extra space for console output
 GRID_SIZE = game.grid_size
-CELL_SIZE = WIDTH // GRID_SIZE
+CELL_SIZE = 500//GRID_SIZE  # Size of each cell in pixels
 
 # Colors
 WHITE = (255, 255, 255)
@@ -60,11 +60,24 @@ def draw_grid():
 # Draw the goal room in yellow with a label
 def draw_goal_room():
     x, y = position_to_grid(game.goal_room)
-    rect = pygame.Rect(x, y, CELL_SIZE - 2, CELL_SIZE - 2)
-    pygame.draw.rect(screen, YELLOW, rect)
-    font = pygame.font.Font(None, 36)
-    label = font.render('Goal', True, BLACK)
-    screen.blit(label, (x + CELL_SIZE // 4 + 1, y + CELL_SIZE // 4 + 1))
+    center_x = x + CELL_SIZE // 2
+    center_y = y + CELL_SIZE // 2
+
+    #outer radius 
+    outer_radius = int(CELL_SIZE * 0.4)
+    inner_radius = int(outer_radius * 0.5)
+    pygame.draw.circle(screen, (255,0,0), (center_x, center_y), outer_radius)
+    
+    #inner circle
+    pygame.draw.circle(screen, (225,255,255), (center_x, center_y), inner_radius)
+
+    pygame.draw.circle(screen, (255, 0, 0), (center_x, center_y), inner_radius // 2)
+    
+    #rect = pygame.Rect(x, y, CELL_SIZE - 2, CELL_SIZE - 2)
+    #pygame.draw.rect(screen, (255, 255, 0, 128), rect)
+    #font = pygame.font.Font(None, 36)
+    #label = font.render('Goal', True, BLACK)
+    #screen.blit(label, (x + CELL_SIZE // 4 + 1, y + CELL_SIZE // 4 + 1))
 
 
 # Draw walls on the grid
