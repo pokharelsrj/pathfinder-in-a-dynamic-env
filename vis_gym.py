@@ -1,12 +1,12 @@
 import pygame
 import sys
 import time
-from mdp_gym import CastleEscapeEnv  # Import the updated CastleEscapeEnv (without guards)
+from mdp_gym import DynamicMazeEnv # Import the updated CastleEscapeEnv (without guards)
 import random
 import math
 
 # Initialize the updated environment
-game = CastleEscapeEnv()
+game = DynamicMazeEnv()
 
 # Screen configuration
 GRID_SIZE = game.grid_size
