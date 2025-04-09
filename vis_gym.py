@@ -2,14 +2,17 @@ import pygame
 import sys
 import time
 from mdp_gym import CastleEscapeEnv  # Import the updated CastleEscapeEnv (without guards)
+import random
+import math
 
 # Initialize the updated environment
 game = CastleEscapeEnv()
 
 # Screen configuration
-WIDTH, HEIGHT = 600, 840  # 5x5 grid, each room is 120x120 pixels; extra space for console output
 GRID_SIZE = game.grid_size
 CELL_SIZE = 500//GRID_SIZE  # Size of each cell in pixels
+WIDTH = GRID_SIZE * CELL_SIZE
+HEIGHT = GRID_SIZE * CELL_SIZE 
 
 # Colors
 WHITE = (255, 255, 255)
@@ -36,8 +39,8 @@ def setup(GUI=True):
     global screen
     if GUI:
         pygame.init()
-        screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("Castle Escape MDP Visualization")
+        screen = pygame.display.set_mode((WIDTH, HEIGHT + 50))
+        pygame.display.set_caption("Dynamic Maze Environment")
 
 
 # Map room coordinate to pixel grid position
@@ -49,11 +52,11 @@ def position_to_grid(position):
 # Draw the grid and the console area
 def draw_grid():
     for x in range(0, WIDTH, CELL_SIZE):
-        for y in range(0, 600, CELL_SIZE):
+        for y in range(0, HEIGHT, CELL_SIZE):
             rect = pygame.Rect(x, y, CELL_SIZE, CELL_SIZE)
             pygame.draw.rect(screen, BLACK, rect, 1)
     # Shade the console area
-    rect = pygame.Rect(0, 600, WIDTH, HEIGHT - 600)
+    rect = pygame.Rect(0, HEIGHT+100, WIDTH, HEIGHT)
     pygame.draw.rect(screen, GRAY, rect)
 
 
@@ -226,10 +229,27 @@ def draw_player(position):
 
 # Display an end-of-game message (e.g., "Victory!")
 def display_end_message(message):
-    font = pygame.font.Font(None, 100)
-    text_surface = font.render(message, True, DARK_GRAY)
-    text_rect = text_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-    screen.blit(text_surface, text_rect)
+    # Create a pulsating effect
+    pulse_value = abs(math.sin(pygame.time.get_ticks() / 300)) * 255
+    goal_surface = pygame.Surface((WIDTH, 40), pygame.SRCALPHA)
+    goal_surface.fill((0, 100, 0, min(200, int(pulse_value))))
+    
+    goal_font = pygame.font.SysFont(None, 22)
+    goal_reached_text = goal_font.render(message, True, (255, 255, 0))
+    goal_reached_rect = goal_reached_text.get_rect(center=(WIDTH // 2, 20))
+    goal_surface.blit(goal_reached_text, goal_reached_rect)
+            
+    # Position at the bottom of the grid, above the panel
+    screen.blit(goal_surface, (0, GRID_SIZE * CELL_SIZE - 40))
+            
+    # Add celebration particles
+    if random.random() < 0.3:  # Only create particles occasionally
+        for _ in range(5):
+            x = random.randint(0, WIDTH)
+            y = random.randint(GRID_SIZE * CELL_SIZE - 60, GRID_SIZE * CELL_SIZE - 20)
+            size = random.randint(2, 5)
+            color = random.choice([(255,255,0), (0,255,0), (0,255,255), (255,0,255)])
+            pygame.draw.circle(screen, color, (x, y), size)
 
 
 # Main loop for the Pygame visualization
@@ -277,24 +297,31 @@ def main():
         # Check for terminal state (goal reached)
         if game.is_terminal() == 'goal':
             game_ended = True
-            end_message = "Victory!"
+            end_message = "GOAL REACHED!"
 
         if game_ended:
             display_end_message(end_message)
             # Optionally, you can stop the game loop here instead of resetting game_ended
             game_ended = False
 
+        reward = 0 
+        # Display reward with a fancy format centered at the top of the panel
+        reward_font = pygame.font.SysFont(None, 28)
+        reward_text = reward_font.render(f"SCORE: {reward}", True, BLUE)
+        reward_rect = reward_text.get_rect(center=(WIDTH // 2, HEIGHT + 25))
+        screen.blit(reward_text, reward_rect)
+        
         # Display the latest 5 console messages
-        font = pygame.font.Font(None, 30)
-        console_surface = font.render("Console", True, BLUE)
-        screen.blit(console_surface, (10, 610))
-        font = pygame.font.Font(None, 24)
-        y_offset = 645
-        for result in action_results[-5:]:
-            if result is not None:
-                result_surface = font.render(result, True, BLACK)
-                screen.blit(result_surface, (10, y_offset))
-                y_offset += 30
+        #font = pygame.font.Font(None, 30)
+        #console_surface = font.render("Console", True, BLUE)
+        #screen.blit(console_surface, (10, HEIGHT + 10))
+        #font = pygame.font.Font(None, 24)
+        #y_offset = HEIGHT + 45
+        #for result in action_results[-5:]:
+        #    if result is not None:
+        #        result_surface = font.render(result, True, BLACK)
+        #        screen.blit(result_surface, (10, y_offset))
+        #        y_offset += 30
 
         pygame.display.flip()
         clock.tick(30)
@@ -330,7 +357,7 @@ def refresh(obs, reward, done, info, delay=0.1):
 
     if game.is_terminal() == 'goal':
         game_ended = True
-        end_message = "Victory!"
+        end_message = "GOAL REACHED!"
         display_end_message(end_message)
     pygame.display.flip()
     clock.tick(fps)
