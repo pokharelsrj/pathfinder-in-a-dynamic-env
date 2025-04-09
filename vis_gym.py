@@ -20,12 +20,6 @@ GRAY = (200, 200, 200)
 DARK_GRAY = (50, 50, 50)
 YELLOW = (255, 255, 0)  # Color for the goal room
 
-## File paths for images can be added here if needed in the future
-IMGFILEPATH = {
-    # 'player': 'path/to/player.png',
-    # 'wall': 'path/to/wall.png',
-    # 'goal': 'path/to/goal.png'
-}
 
 # Global variables
 screen = None
@@ -75,19 +69,146 @@ def draw_goal_room():
 
 # Draw walls on the grid
 def draw_walls():
+    # colors
+    brick_color = (139, 69, 19) 
+    mortar_color = (169, 169, 169)
     for wall in game.wall_positions:
         x, y = position_to_grid(wall)
         # Draw wall as a slightly inset dark gray rectangle
         rect = pygame.Rect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4)
-        pygame.draw.rect(screen, DARK_GRAY, rect)
+        pygame.draw.rect(screen, mortar_color, rect)
+
+        mortar_thickness = max(1, min(rect.width, rect.height) // 25)
+        brick_height = rect.height // 3
+        brick_width = rect.width // 2
+
+        # Draw the brick pattern rows
+        for brick_row in range((rect.height // brick_height) + 1):
+            y_pos = rect.y + brick_row * brick_height
+            # Offset every other row for the brick pattern
+            x_offset = brick_width // 2 if brick_row % 2 else 0
+            
+            # Draw the bricks in this row
+            for brick_col in range(-1, (rect.width // brick_width) + 2):
+                x_pos = rect.x + x_offset + brick_col * brick_width
+                
+                # Define brick rectangle with mortar spacing
+                brick = pygame.Rect(
+                    x_pos + mortar_thickness,
+                    y_pos + mortar_thickness,
+                    brick_width - (mortar_thickness * 2),
+                    brick_height - (mortar_thickness * 2)
+                )
+                
+                # Only draw the brick if it's at least partially inside the cell
+                if (brick.right > rect.left and brick.left < rect.right and
+                    brick.bottom > rect.top and brick.top < rect.bottom):
+                    
+                    # Clip the brick to stay within the cell boundaries
+                    if brick.left < rect.left:
+                        brick.width -= (rect.left - brick.left)
+                        brick.left = rect.left
+                    if brick.right > rect.right:
+                        brick.width = rect.right - brick.left
+                    if brick.top < rect.top:
+                        brick.height -= (rect.top - brick.top)
+                        brick.top = rect.top
+                    if brick.bottom > rect.bottom:
+                        brick.height = rect.bottom - brick.top
+                    
+                    # Draw the brick only if it has positive dimensions
+                    if brick.width > 0 and brick.height > 0:
+                        pygame.draw.rect(screen, brick_color, brick)
+
 
 
 # Draw the player as a green circle
 def draw_player(position):
-    x, y = position_to_grid(position)
-    center_x = x + CELL_SIZE // 2
-    center_y = y + CELL_SIZE // 2
-    pygame.draw.circle(screen, GREEN, (center_x, center_y), CELL_SIZE // 4)
+    """
+    Draw a simple robot character using basic shapes
+    """
+    # Calculate center position
+    center_x = position[1] * CELL_SIZE + CELL_SIZE // 2
+    center_y = position[0] * CELL_SIZE + CELL_SIZE// 2
+    
+    # Robot size (slightly smaller than the cell)
+    size = CELL_SIZE // 3
+    
+    # Robot head (square)
+    head_color = (100, 100, 180)  # Steel blue
+    head_rect = pygame.Rect(
+        center_x - size,
+        center_y - size,
+        size * 2,
+        size * 2
+        )
+    pygame.draw.rect(screen, head_color, head_rect)
+    
+    # Robot eyes (two small rectangles)
+    eye_color = (255, 255, 0)  # Yellow
+    eye_width = size // 2
+    eye_height = size // 3
+    eye_y = center_y - size // 2
+    
+    # Left eye
+    left_eye_rect = pygame.Rect(
+        center_x - size // 2 - eye_width // 2,
+        eye_y,
+        eye_width,
+        eye_height
+    )
+    pygame.draw.rect(screen, eye_color, left_eye_rect)
+    
+    # Right eye
+    right_eye_rect = pygame.Rect(
+        center_x + size // 2 - eye_width // 2,
+        eye_y,
+        eye_width,
+        eye_height
+    )
+    pygame.draw.rect(screen, eye_color, right_eye_rect)
+    
+    # Antenna
+    antenna_color = (200, 0, 0)  # Red
+    pygame.draw.line(
+        screen,
+            antenna_color,
+            (center_x, center_y - size),
+            (center_x, center_y - size - size//2),
+            3
+    )
+    
+    # Antenna top
+    pygame.draw.circle(
+        screen,
+        antenna_color,
+        (center_x, center_y - size - size//2),
+        size // 4
+    )
+    
+    # Robot mouth (simple line)
+    mouth_y = center_y + size // 2
+    pygame.draw.line(
+            screen,
+            (50, 50, 50),
+            (center_x - size // 2, mouth_y),
+            (center_x + size // 2, mouth_y),
+            2
+        )
+    
+    # Optional: Add simple body outline
+    body_color = (70, 70, 150)  # Darker blue
+    body_top = center_y + size
+    body_height = size
+    
+    # Body rectangle
+    body_rect = pygame.Rect(
+            center_x - size * 0.75,
+            body_top,
+            size * 1.5,
+            body_height
+        )
+    pygame.draw.rect(screen, body_color, body_rect)
 
 
 # Display an end-of-game message (e.g., "Victory!")
@@ -127,6 +248,10 @@ def main():
                     if event.key == pygame.K_d:
                         action = "RIGHT"
                         result = game.step(action)
+                        action_results.append(f"Action: {action}, Result: {result}")
+                    if event.key == pygame.K_r:
+                        action = "RESET"
+                        result = game.reset()
                         action_results.append(f"Action: {action}, Result: {result}")
         screen.fill(WHITE)
         draw_grid()
