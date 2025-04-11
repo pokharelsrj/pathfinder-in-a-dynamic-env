@@ -9,7 +9,7 @@ class CastleEscapeEnv(gym.Env):
 
     def __init__(self):
         super(CastleEscapeEnv, self).__init__()
-        self.grid_size = 10
+        self.grid_size = 8
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
         self.goal_room = (self.grid_size - 1, self.grid_size - 1)
         self.randomise_counter = 0
@@ -38,7 +38,7 @@ class CastleEscapeEnv(gym.Env):
         self.observation_space = spaces.Dict(obs_space_dict)
 
         # Walls configuration
-        self.num_walls = 30
+        self.num_walls = int(0.3 * (self.grid_size ** 2))
         self.wall_positions = []
 
         self.reset()

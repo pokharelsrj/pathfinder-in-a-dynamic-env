@@ -24,7 +24,7 @@ env = game  # Gym environment already initialized within vis_gym.py
 #
 #     return x * (5 * 2 * 5) + y * (2 * 5) + h * 5 + g
 
-def get_partial_observation(player_position, wall_positions, grid_size=5):
+def get_partial_observation(player_position, wall_positions, grid_size=8):
     """
     Extract a 5x5 grid around the player's position.
     Walls are indicated with 1, free cells with 0.
@@ -181,10 +181,11 @@ Comment before final submission or autograder may fail.
 '''
 
 Q_table = np.load('Q_table.pickle', allow_pickle=True)
-# print(Q_table)
+print(len(Q_table))
 i = 0
 total_reward = 0
-while i != 50:
+total_steps = 0
+while i != 5000:
     obs, reward, done, info = env.reset()
     while not done:
         state = compute_partial_state_hash(env.current_state['player_position'],
@@ -194,12 +195,14 @@ while i != 50:
         action = env.actions[action_index]
         obs, reward, done, info = env.step(action)
         total_reward += reward
+        total_steps += 1
         if gui_flag:
             refresh(obs, reward, done, info)  # Update the game screen [GUI only]
     i += 1
     print(i)
 
-print(total_reward / 100000)
+print(total_reward / 5000)
+print(total_steps / 5000)
 
 # Close the
 env.close()  # Close the environment
