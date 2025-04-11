@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 from vis_gym import *
 
-gui_flag = True  # Set to True to enable the game state visualization
+gui_flag = False  # Set to True to enable the game state visualization
 setup(GUI=gui_flag)
 env = game  # Gym environment already initialized within vis_gym.py
 
@@ -150,7 +150,7 @@ def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
 # decay_rate = 0.999999
 #
 # Q_table = Q_learning(num_episodes=1000000, gamma=0.9, epsilon=1, decay_rate=decay_rate)  # Run Q-learning
-#
+
 # # Save the Q-table dict to a file
 # with open('Q_table.pickle', 'wb') as handle:
 #     pickle.dump(Q_table, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -162,10 +162,11 @@ Comment before final submission or autograder may fail.
 '''
 
 Q_table = np.load('Q_table.pickle', allow_pickle=True)
-# print(Q_table)
+print(len(Q_table))
 i = 0
+total_step = 0
 total_reward = 0
-while i != 50:
+while i != 5000:
     obs, reward, done, info = env.reset()
     while not done:
         state = compute_partial_state_hash(env.current_state['player_position'],
@@ -175,12 +176,14 @@ while i != 50:
         action = env.actions[action_index]
         obs, reward, done, info = env.step(action)
         total_reward += reward
+        total_step += 1
         if gui_flag:
             refresh(obs, reward, done, info)  # Update the game screen [GUI only]
     i += 1
     print(i)
 
-print(total_reward / 100000)
+print(total_reward / 5000)
+print(total_step/5000)
 
 # Close the
 env.close()  # Close the environment
