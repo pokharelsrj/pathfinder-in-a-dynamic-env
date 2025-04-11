@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 from vis_gym import *
 
-gui_flag = False  # Set to True to enable the game state visualization
+gui_flag = True  # Set to True to enable the game state visualization
 setup(GUI=gui_flag)
 env = game  # Gym environment already initialized within vis_gym.py
 
@@ -150,7 +150,7 @@ def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
 # decay_rate = 0.999999
 #
 # Q_table = Q_learning(num_episodes=1000000, gamma=0.9, epsilon=1, decay_rate=decay_rate)  # Run Q-learning
-
+#
 # # Save the Q-table dict to a file
 # with open('Q_table.pickle', 'wb') as handle:
 #     pickle.dump(Q_table, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -180,7 +180,7 @@ while i != 5000:
         if gui_flag:
             refresh(obs, reward, done, info)  # Update the game screen [GUI only]
     i += 1
-    print(i)
+    # print(i)
 
 print(total_reward / 5000)
 print(total_step/5000)
