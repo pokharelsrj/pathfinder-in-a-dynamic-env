@@ -8,6 +8,8 @@ class CastleEscapeEnv(gym.Env):
 
     def __init__(self):
         super(CastleEscapeEnv, self).__init__()
+        self.start_pos = None
+        self.goal_room = None
         self.grid_size = 8
         self.rooms = [(i, j) for i in range(self.grid_size) for j in range(self.grid_size)]
         self.randomise_counter = 0
@@ -20,7 +22,8 @@ class CastleEscapeEnv(gym.Env):
         # Rewards
         self.rewards = {
             'goal': 10000,
-            'wall_hit': -1000
+            'wall_hit': -1000,
+            'step': 0
         }
 
         # Only movement actions are available.
@@ -55,10 +58,12 @@ class CastleEscapeEnv(gym.Env):
     def reset(self):
         """Resets the game to the initial state with random start and goal positions."""
         # Randomize starting position
-        start_pos = random.choice(self.rooms)
+        start_pos = (0, 0)
         # Randomize goal room ensuring it's not the same as start
         available_goals = [pos for pos in self.rooms if pos != start_pos]
         goal_pos = random.choice(available_goals)
+        # random.choice(available_goals)
+        # (self.grid_size - 1, self.grid_size - 1)
 
         self.current_state = {
             'player_position': start_pos,
@@ -104,7 +109,6 @@ class CastleEscapeEnv(gym.Env):
         return False
 
     def move_player(self, action):
-        """Moves the player according to the action provided."""
         x, y = self.current_state['player_position']
         directions = {
             'UP': (x - 1, y),
@@ -114,26 +118,30 @@ class CastleEscapeEnv(gym.Env):
         }
         new_position = directions.get(action, (x, y))
 
-        # Ensure new position is within bounds.
-        if 0 <= new_position[0] < self.grid_size and 0 <= new_position[1] < self.grid_size:
-            # 90% chance to move as intended.
-            if random.random() <= 0.9:
-                self.current_state['player_position'] = new_position
-            else:
-                # 10% chance to move to a random adjacent cell.
-                adjacent_positions = [pos for pos in directions.values()
-                                      if 0 <= pos[0] < self.grid_size and 0 <= pos[1] < self.grid_size]
-                if adjacent_positions:
-                    self.current_state['player_position'] = random.choice(adjacent_positions)
+        # Check for out-of-bound move and treat it as hitting an outer wall.
+        if not (0 <= new_position[0] < self.grid_size and 0 <= new_position[1] < self.grid_size):
+            self.move_player_to_random_adjacent()
+            message = f"Attempted to move out-of-bounds at {new_position}, treated as wall hit. Health now {self.current_state['player_health']}."
+            return message, self.rewards['wall_hit']
 
-            # If new position is a wall, decrement health and move randomly.
-            if self.current_state['player_position'] in self.wall_positions:
-                self.move_player_to_random_adjacent()
-                message = f"Hit a wall at {self.current_state['player_position']}! Health now {self.current_state['player_health']}."
-                return message, self.rewards['wall_hit']
-            return f"Moved to {self.current_state['player_position']}", 0
+        # 90% chance to move as intended; otherwise, move randomly among valid adjacent positions.
+        if random.random() <= 0.9:
+            self.current_state['player_position'] = new_position
         else:
-            return "Out of bounds!", 0
+            adjacent_positions = [
+                pos for pos in directions.values()
+                if 0 <= pos[0] < self.grid_size and 0 <= pos[1] < self.grid_size
+            ]
+            if adjacent_positions:
+                self.current_state['player_position'] = random.choice(adjacent_positions)
+
+        # Check if the new cell contains a wall.
+        if self.current_state['player_position'] in self.wall_positions:
+            self.move_player_to_random_adjacent()
+            message = f"Hit a wall at {self.current_state['player_position']}! Health now {self.current_state['player_health']}."
+            return message, self.rewards['wall_hit']
+
+        return f"Moved to {self.current_state['player_position']}", 0
 
     def step(self, action):
         """Performs one step in the environment."""
@@ -159,6 +167,7 @@ class CastleEscapeEnv(gym.Env):
         if self.randomise_counter % 2 == 0:
             self.wall_positions = self.randomise_walls()
 
+        reward += self.rewards['step']
         observation = self.get_observation()
         info = {'result': result, 'action': action_name}
         return observation, reward, done, info

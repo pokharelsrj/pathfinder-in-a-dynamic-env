@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 from vis_gym import *
 
-gui_flag = True  # Set to True to enable the game state visualization
+gui_flag = False  # Set to True to enable the game state visualization
 setup(GUI=gui_flag)
 env = game  # Gym environment already initialized within vis_gym.py
 
