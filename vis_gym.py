@@ -1,12 +1,14 @@
 import pygame
 import sys
 import time
-import random
 from mdp_gym import CastleEscapeEnv  # Import the updated CastleEscapeEnv (without guards)
+
+# Initialize the updated environment
+game = CastleEscapeEnv()
 
 # Screen configuration
 WIDTH, HEIGHT = 600, 840  # 5x5 grid, each room is 120x120 pixels; extra space for console output
-GRID_SIZE = 10
+GRID_SIZE = game.grid_size
 CELL_SIZE = WIDTH // GRID_SIZE
 
 # Colors
@@ -30,12 +32,9 @@ screen = None
 game_ended = False
 action_results = [None, None, None, None, None]
 
-fps = 60
+fps = 10
 sleeptime = 0.1
 clock = None
-
-# Initialize the updated environment
-game = CastleEscapeEnv()
 
 
 # Initialize Pygame

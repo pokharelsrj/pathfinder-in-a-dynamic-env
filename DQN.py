@@ -1,49 +1,95 @@
-import math
+"""
+Deep Q-Network (DQN) Implementation for Grid-Based Environment
+"""
+import hashlib
 from collections import namedtuple, deque
 from itertools import count
 
-from torch import nn, optim
-import torch.nn.functional as F
+import random
 import torch
+import torch.nn.functional as F
+from torch import nn, optim
+from torch.utils.tensorboard import SummaryWriter
+
 from vis_gym import *
 
-# Set up environment.
-gui_flag = True
-setup(GUI=gui_flag)
-env = game
 
-# Device selection.
-device = torch.device(
-    "cuda" if torch.cuda.is_available() else
-    "mps" if torch.backends.mps.is_available() else
-    "cpu"
-)
-print("Using device:", device)
+# ================ CONFIGURATION ================
 
-# Hyperparameters and constants.
-BATCH_SIZE = 128
-GAMMA = 0.99
-EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 1000
-TAU = 0.005
-LR = 1e-4
+class Config:
+    """Core configuration parameters"""
 
-# Environment info.
-n_actions = len(env.actions)
-n_observations = 9
+    # Environment settings
+    GUI_ENABLED = True
 
-# Transition tuple for replay memory.
-Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
+    # Hardware settings
+    DEVICE = torch.device(
+        "cuda" if torch.cuda.is_available() else
+        "mps" if torch.backends.mps.is_available() else
+        "cpu"
+    )
+
+    # DQN hyperparameters
+    BATCH_SIZE = 256
+    GAMMA = 0.99
+    EPSILON_START = 1.0
+    EPSILON_MIN = 0.1
+    EPSILON_DECAY = 0.999
+    TAU = 0.0005
+    LEARNING_RATE = 1e-5
+
+    # Training settings
+    REPLAY_MEMORY_SIZE = 50000
+    TRAIN_EPISODES = 700
+    EVAL_EPISODES = 10
+
+    # Data structures
+    Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 
-# Replay Memory class.
-class ReplayMemory(object):
+# ================ ENVIRONMENT SETUP ================
+
+def setup_environment():
+    """Initialize the environment"""
+    setup(GUI=Config.GUI_ENABLED)
+    env = game
+    n_actions = len(env.actions)
+    n_observations = 10
+
+    print(f"Using device: {Config.DEVICE}")
+
+    return env, n_actions, n_observations
+
+
+# ================ NEURAL NETWORK ================
+
+class DQN(nn.Module):
+    """Deep Q-Network Model"""
+
+    def __init__(self, input_size, output_size):
+        super(DQN, self).__init__()
+        self.layer_1 = nn.Linear(input_size, 128)
+        self.layer_2 = nn.Linear(128, 128)
+        self.layer_3 = nn.Linear(128, 128)
+        self.layer_4 = nn.Linear(128, output_size)
+
+    def forward(self, x):
+        x = F.relu(self.layer_1(x))
+        x = F.relu(self.layer_2(x))
+        x = F.relu(self.layer_3(x))
+        return self.layer_4(x)
+
+
+# ================ REPLAY MEMORY ================
+
+class ReplayMemory:
+    """Experience replay buffer"""
+
     def __init__(self, capacity):
         self.memory = deque([], maxlen=capacity)
 
     def push(self, *args):
-        self.memory.append(Transition(*args))
+        self.memory.append(Config.Transition(*args))
 
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
@@ -52,164 +98,250 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-# DQN model definition.
-class DQN(nn.Module):
-    def __init__(self, n_observations, n_actions):
-        super(DQN, self).__init__()
-        self.layer_1 = nn.Linear(n_observations, 128)
-        self.layer_2 = nn.Linear(128, 128)
-        self.layer_3 = nn.Linear(128, n_actions)
+# ================ AGENT ================
 
-    def forward(self, x):
-        x = F.relu(self.layer_1(x))
-        x = F.relu(self.layer_2(x))
-        return self.layer_3(x)
+class DQNAgent:
+    """DQN Agent implementation"""
+
+    def __init__(self, env, n_observations, n_actions):
+        self.env = env
+        self.n_observations = n_observations
+        self.n_actions = n_actions
+        self.epsilon = Config.EPSILON_START
+
+        # Initialize networks
+        self.policy_net = DQN(n_observations, n_actions).to(Config.DEVICE)
+        self.target_net = DQN(n_observations, n_actions).to(Config.DEVICE)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+
+        # Initialize optimizer and memory
+        self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=Config.LEARNING_RATE, amsgrad=True)
+        self.memory = ReplayMemory(Config.REPLAY_MEMORY_SIZE)
+
+    def select_action(self, state):
+        """Select action using epsilon-greedy policy"""
+        if random.random() < self.epsilon:
+            action = torch.tensor([[self.env.action_space.sample()]],
+                                  device=Config.DEVICE, dtype=torch.long)
+            is_random = True
+        else:
+            with torch.no_grad():
+                action = self.policy_net(state).max(1).indices.view(1, 1)
+            is_random = False
+        return action, is_random
+
+    def cell_hash(cell):
+        i, j = cell
+        return i * 9 + j
+
+    def process_observation(self):
+        player_position = self.env.current_state['player_position']
+        wall_positions = self.env.wall_positions
+        grid_size = self.env.grid_size
+        i, j = self.env.goal_room
+        x, y = player_position
+        flattened_grid = []
+        for i in range(x - 1, x + 2):  # x-1, x, x+1
+            for j in range(y - 1, y + 2):  # y-1, y, y+1
+                if 0 <= i < grid_size and 0 <= j < grid_size:
+                    flattened_grid.append(1 if (i, j) in wall_positions else 0)
+                else:
+                    flattened_grid.append(1)  # out-of-bound cells marked with 1
+        flattened_grid.append((i * (grid_size - 1)) + j)
+
+        return tuple(flattened_grid)
+
+    def get_state_tensor(self, observation=None):
+        """Convert observation to tensor state"""
+        if observation is None:
+            observation = self.process_observation()
+        return torch.tensor(observation, dtype=torch.float32, device=Config.DEVICE).unsqueeze(0)
+
+    def optimize_model(self):
+        """Perform one step of optimization with Double DQN implementation"""
+        if len(self.memory) < Config.BATCH_SIZE:
+            return None
+
+        # Sample transitions
+        transitions = self.memory.sample(Config.BATCH_SIZE)
+        batch = Config.Transition(*zip(*transitions))
+
+        # Create mask for non-final states
+        non_final_mask = torch.tensor(
+            tuple(s is not None for s in batch.next_state),
+            device=Config.DEVICE, dtype=torch.bool
+        )
+
+        # Prepare batch data
+        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
+
+        # Get current Q values
+        state_action_values = self.policy_net(state_batch).gather(1, action_batch)
+
+        next_state_values = torch.zeros(Config.BATCH_SIZE, device=Config.DEVICE)
+        next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0].detach()
+
+        # Compute expected Q values
+        expected_state_action_values = (next_state_values * Config.GAMMA) + reward_batch
+
+        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+
+        # Optimize
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
+        self.optimizer.step()
+
+        return loss.item()
+
+    def soft_update_target_network(self):
+        """Soft update target network"""
+        target_dict = self.target_net.state_dict()
+        policy_dict = self.policy_net.state_dict()
+
+        for key in policy_dict:
+            target_dict[key] = policy_dict[key] * Config.TAU + target_dict[key] * (1 - Config.TAU)
+
+        self.target_net.load_state_dict(target_dict)
+
+    def decay_epsilon(self):
+        """Decay exploration rate"""
+        self.epsilon = max(Config.EPSILON_MIN, self.epsilon * Config.EPSILON_DECAY)
+
+    def save_model(self, suffix=""):
+        """Save the trained model"""
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        model_filename = f'dqn_model_{timestamp}{suffix}.pth'
+        torch.save(self.policy_net.state_dict(), model_filename)
+        return model_filename
+
+    def load_model(self, filename):
+        """Load a saved model"""
+        self.policy_net.load_state_dict(torch.load(filename, map_location=Config.DEVICE))
+        self.target_net.load_state_dict(self.policy_net.state_dict())
 
 
-# Initialize networks, optimizer, and memory.
-policy_net = DQN(n_observations, n_actions).to(device)
-target_net = DQN(n_observations, n_actions).to(device)
-target_net.load_state_dict(policy_net.state_dict())
-optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
-memory = ReplayMemory(10000)
+# ================ TRAINING ================
 
+def train(agent, num_episodes, writer):
+    """Train the agent"""
+    # Track all losses for global metrics
+    total_loss = 0.0
+    steps = 1
 
-# Helper function: Process observation into a flattened 3x3 grid.
-def get_flattened_observation(env):
-    player_position = env.current_state['player_position']
-    wall_positions = env.wall_positions
-    grid_size = env.grid_size
-    x, y = player_position
-    flattened_grid = []
-    for i in range(x - 1, x + 2):  # x-1, x, x+1
-        for j in range(y - 1, y + 2):  # y-1, y, y+1
-            if 0 <= i < grid_size and 0 <= j < grid_size:
-                flattened_grid.append(1 if (i, j) in wall_positions else 0)
-            else:
-                flattened_grid.append(1)  # out-of-bound cells marked with 1
-    return tuple(flattened_grid)
+    for episode in range(num_episodes):
+        # Reset environment
+        obs, reward, done, info = agent.env.reset()
+        state = agent.get_state_tensor()
 
-
-# Helper function: Epsilon-greedy action selection.
-def select_action(state, policy_net, steps_done, env):
-    sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
-    steps_done += 1
-    if sample > eps_threshold:
-        with torch.no_grad():
-            action = policy_net(state).max(1).indices.view(1, 1)
-    else:
-        action = torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
-    return action, steps_done
-
-
-# Helper function: Optimize the model using a batch of transitions.
-def optimize_model(policy_net, target_net, optimizer, memory):
-    if len(memory) < BATCH_SIZE:
-        return
-    transitions = memory.sample(BATCH_SIZE)
-    batch = Transition(*zip(*transitions))
-
-    non_final_mask = torch.tensor(
-        tuple(s is not None for s in batch.next_state), device=device, dtype=torch.bool)
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-    state_batch = torch.cat(batch.state)
-    action_batch = torch.cat(batch.action)
-    reward_batch = torch.cat(batch.reward)
-
-    state_action_values = policy_net(state_batch).gather(1, action_batch)
-
-    next_state_values = torch.zeros(BATCH_SIZE, device=device)
-    with torch.no_grad():
-        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1).values
-
-    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
-    criterion = nn.SmoothL1Loss()
-    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
-
-    optimizer.zero_grad()
-    loss.backward()
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
-    optimizer.step()
-
-
-# Helper function: Soft update the target network.
-def soft_update(target_net, policy_net, tau):
-    target_dict = target_net.state_dict()
-    policy_dict = policy_net.state_dict()
-    for key in policy_dict:
-        target_dict[key] = policy_dict[key] * tau + target_dict[key] * (1 - tau)
-    target_net.load_state_dict(target_dict)
-
-
-# Training loop.
-def train_agent(env, policy_net, target_net, optimizer, memory, num_episodes):
-    steps_done = 0
-    for ep in range(num_episodes):
-        obs, reward, done, info = env.reset()
-        flat_obs = get_flattened_observation(env)
-        state = torch.tensor(flat_obs, dtype=torch.float32, device=device).unsqueeze(0)
+        # Episode tracking
         episode_reward = 0
+        episode_step = 1
 
+        # Log epsilon
+        writer.add_scalar("Epsilon/episode", agent.epsilon, episode)
+
+        # Episode loop
         for t in count():
-            action, steps_done = select_action(state, policy_net, steps_done, env)
-            obs, reward, done, info = env.step(action)
-            reward_tensor = torch.tensor([reward], device=device)
+            # Select and perform action
+            action, _ = agent.select_action(state)
+            obs, reward, done, info = agent.env.step(action)
+            reward_tensor = torch.tensor([reward], device=Config.DEVICE)
             episode_reward += reward
 
-            if done:
-                next_state = None
-            else:
-                flat_obs = get_flattened_observation(env)
-                next_state = torch.tensor(flat_obs, dtype=torch.float32, device=device).unsqueeze(0)
+            # Process next state
+            next_state = None if done else agent.get_state_tensor()
 
-            memory.push(state, action, next_state, reward_tensor)
+            # Store transition and optimize
+            agent.memory.push(state, action, next_state, reward_tensor)
             state = next_state
 
-            optimize_model(policy_net, target_net, optimizer, memory)
-            soft_update(target_net, policy_net, TAU)
+            # Optimize model and track loss
+            loss_value = agent.optimize_model()
+            steps += 1
+            if loss_value is not None:
+                total_loss += loss_value
 
+                # Log step-wise loss (per optimization step)
+                writer.add_scalar("Loss/step", total_loss / steps, steps)
+
+            # Update target network
+            agent.soft_update_target_network()
+            episode_step += 1
+
+            # Episode end handling
             if done:
-                print(f"Episode {ep + 1} finished after {t + 1} steps, Total Reward: {episode_reward}")
+                # Calculate and log episode metrics
+                writer.add_scalar("Reward/episode", episode_reward / episode_step, episode + 1)
+                writer.add_scalar("Step/episode", steps / (episode + 1), episode + 1)
+                writer.add_scalar("Loss/episode_avg", total_loss / (episode + 1), episode + 1)
+
+                print(
+                    f"Episode {episode + 1}: {episode_step} steps, Reward: {episode_reward}, Epsilon: {agent.epsilon:.4f}"
+                )
                 break
 
-    torch.save(policy_net.state_dict(), 'dqn_model.pth')
-    print("Training complete. Model saved as dqn_model.pth.")
+        # Decay epsilon
+        agent.decay_epsilon()
+
+    # Save model
+    return agent.save_model()
 
 
-# Evaluation loop.
-def evaluate_agent(env, policy_net, num_eval_episodes=5):
-    policy_net.eval()
-    for episode in range(num_eval_episodes):
-        obs, reward, done, info = env.reset()
-        state = torch.tensor(get_flattened_observation(env), dtype=torch.float32, device=device).unsqueeze(0)
+# ================ EVALUATION ================
+
+def evaluate(agent, num_episodes):
+    """Evaluate the agent"""
+    agent.policy_net.eval()
+
+    for episode in range(num_episodes):
+        obs, reward, done, info = agent.env.reset()
+        state = agent.get_state_tensor()
         total_reward = 0
 
         while True:
+            # Select best action
             with torch.no_grad():
-                action = policy_net(state).max(1).indices.view(1, 1)
-            obs, reward, done, info = env.step(action)
+                action = agent.policy_net(state).max(1).indices.view(1, 1)
+
+            # Step environment
+            obs, reward, done, info = agent.env.step(action)
             total_reward += reward
-            if gui_flag:
+
+            # Update UI if enabled
+            if Config.GUI_ENABLED:
                 refresh(obs, reward, done, info)
 
             if done:
-                print(f"Evaluation Episode {episode + 1}: Total Reward = {total_reward}")
+                print(f"Eval Episode {episode + 1}: Reward = {total_reward}")
                 break
-            state = torch.tensor(get_flattened_observation(env), dtype=torch.float32, device=device).unsqueeze(0)
+
+            state = agent.get_state_tensor()
+
+
+# ================ MAIN FUNCTION ================
+
+def main():
+    """Main entry point"""
+    # Setup
+    TRAIN_MODE = False
+    env, n_actions, n_observations = setup_environment()
+    agent = DQNAgent(env, n_observations, n_actions)
+
+    if TRAIN_MODE:
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        log_dir = f"runs/dqn_{timestamp}"
+        writer = SummaryWriter(log_dir=log_dir)
+        model_path = train(agent, Config.TRAIN_EPISODES, writer)
+        writer.close()
+        print(f"Training completed. Model saved to {model_path}")
+    else:
+        agent.load_model('dqn_model_20250404-014743.pth')
+        evaluate(agent, Config.EVAL_EPISODES)
 
 
 if __name__ == "__main__":
-    # Set this flag to True to train the agent, or False to evaluate a saved policy.
-    TRAIN_MODE = False
-
-    if TRAIN_MODE:
-        if torch.cuda.is_available() or torch.backends.mps.is_available():
-            num_episodes = 600
-        else:
-            num_episodes = 50
-        train_agent(env, policy_net, target_net, optimizer, memory, num_episodes)
-    else:
-        # Load the saved model weights if available.
-        policy_net.load_state_dict(torch.load('dqn_model.pth', map_location=device))
-        evaluate_agent(env, policy_net, num_eval_episodes=100)
+    main()
