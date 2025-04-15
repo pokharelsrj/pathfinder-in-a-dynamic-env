@@ -3,11 +3,11 @@ from gym import spaces
 import random
 
 
-class CastleEscapeEnv(gym.Env):
+class DynamicMazeEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
-        super(CastleEscapeEnv, self).__init__()
+        super(DynamicMazeEnv, self).__init__()
         self.start_pos = None
         self.goal_room = None
         self.grid_size = 8
