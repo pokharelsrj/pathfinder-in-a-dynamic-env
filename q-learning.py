@@ -17,7 +17,6 @@ class QLearningAgent:
         self.epsilon = epsilon
         self.decay_rate = decay_rate
 
-        # Q‐table and update counters
         self.Q_table = {}
         self.number_of_updates = {}
 
@@ -85,21 +84,24 @@ class QLearningAgent:
                 # Initialize missing entries
                 if self.Q_table.get(state) is None:
                     self.Q_table[state] = np.zeros(len(self.env.actions))
+
                 if self.Q_table.get(prev_state) is None:
                     self.Q_table[prev_state] = np.zeros(len(self.env.actions))
+
                 if self.number_of_updates.get(state) is None:
                     self.number_of_updates[state] = np.zeros(len(self.env.actions))
+
                 if self.number_of_updates.get(prev_state) is None:
                     self.number_of_updates[prev_state] = np.zeros(len(self.env.actions))
 
                 # Q‐learning update
-                Q_opt_prev = self.Q_table[prev_state][index]
+                q_opt_prev = self.Q_table[prev_state][index]
                 updates_prev = self.number_of_updates[prev_state][index]
                 eta = 1.0 / (1 + updates_prev)
-                V_opt = np.max(self.Q_table[state])
-                Q_opt_curr = ((1 - eta) * Q_opt_prev) + eta * (reward + self.gamma * V_opt)
+                v_opt = np.max(self.Q_table[state])
+                q_opt_curr = ((1 - eta) * q_opt_prev) + eta * (reward + self.gamma * v_opt)
 
-                self.Q_table[prev_state][index] = Q_opt_curr
+                self.Q_table[prev_state][index] = q_opt_curr
                 self.number_of_updates[prev_state][index] += 1
 
                 no_of_moves += 1
