@@ -1,7 +1,7 @@
 # 🧠🕹️ MazeMaster: A Dynamic Grid World + Deep Reinforcement Learning Playground
 
 **Survival of the Smartest.**  
-Welcome to **MazeMaster** – a dynamic, obstacle-ridden grid world where pathfinding meets chaos. This isn’t your average game—it's an evolving, AI-driven experiment testing the wit of agents trained through Q-learning and Deep Q-Networks (DQN). Whether you’re here to build, play, or train the next grid-exploring super-agent—**you’ve found the right maze.**
+Welcome to **MazeMaster** – a dynamic, obstacle-ridden grid world where pathfinding meets chaos. This isn’t your average game—it's an evolving, AI-driven experiment testing the wit of agents trained through Q-learning and CNN . Whether you’re here to build, play, or train the next grid-exploring super-agent—**you’ve found the right maze.**
 
 ---
 
@@ -18,7 +18,7 @@ Randomized targets ensure no two episodes feel the same.
 
 🧠 **Reinforcement Learning Agents**  
 - 💾 Classic **Q-learning** with partial observability
-- 📦 CNN-powered **Deep Q-Network (DQN)** agent with PyTorch
+- 📦 CNN-powered agent with PyTorch
 - 🔍 Local state hashing and multi-channel observations
 
 👀 **Visualization FTW**  
