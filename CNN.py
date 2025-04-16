@@ -1,144 +1,55 @@
-"""
-Deep Q-Network (DQN) Implementation for Grid-Based Environment with CNN
-"""
+import argparse
 import random
+import time
 from collections import namedtuple, deque
-from datetime import datetime
-from itertools import count
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
-import numpy as np
 
-from vis_gym import *
+from vis_gym import *  # provides setup, game, refresh
 
-
-# ================ CONFIGURATION ================
-
-class Config:
-    """Modified configuration parameters for 8x8 grid"""
-
-    # Environment settings
-    GUI_ENABLED = False  # Can be False since we're using grid representation now
-
-    # Hardware settings
-    DEVICE = torch.device(
-        "cuda" if torch.cuda.is_available() else
-        "mps" if torch.backends.mps.is_available() else
-        "cpu"
-    )
-
-    # CNN input settings
-    IMAGE_HEIGHT = 8  # Native grid size
-    IMAGE_WIDTH = 8  # Native grid size
-    # Removed stacked frames as we're using a 3-channel representation
-
-    # DQN hyperparameters
-    BATCH_SIZE = 64  # Reduced batch size for smaller network
-    GAMMA = 0.9
-    EPSILON_START = 1
-    EPSILON_MIN = 0.1
-    EPSILON_DECAY = 0.9995
-    TAU = 0.005
-    LEARNING_RATE = 5e-4  # Slightly increased learning rate
-
-    # Training settings
-    REPLAY_MEMORY_SIZE = 10000
-    TRAIN_EPISODES = 3000
-    EVAL_EPISODES = 100
-
-    # Data structures
-    Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
+# ================ TRANSITION ================
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 
-# ================ ENVIRONMENT SETUP ================
-
-def setup_environment():
-    """Initialize the environment"""
-    setup(GUI=Config.GUI_ENABLED)
-    env = game
-    n_actions = len(env.actions)
-
-    print(f"Using device: {Config.DEVICE}")
-
-    return env, n_actions
-
-
-# ================ NEURAL NETWORK ================
-
-"""
-Modified CNNDQN class with debug prints to find the tensor shape issue
-"""
-
-"""
-Simple fix for the CNN-DQN class - modify only the linear layer size
-"""
-
-
+# ================ CNN-DQN MODEL ================
 class CNNDQN(nn.Module):
-    """Modified CNN-Based Deep Q-Network Model for smaller 8x8 grid inputs."""
-
-    def __init__(self, h, w, outputs):
+    def __init__(self, input_channels, h, w, outputs):
         super(CNNDQN, self).__init__()
-
-        # Input has 3 channels (walls, agent, goal)
-        input_channels = 3
-
-        # Smaller kernel sizes and no stride for the smaller input grid
         self.conv1 = nn.Conv2d(input_channels, 8, kernel_size=2, stride=1)
-        self.bn1 = nn.BatchNorm2d(8)  # Added batch normalization
-
+        self.bn1 = nn.BatchNorm2d(8)
         self.conv2 = nn.Conv2d(8, 16, kernel_size=2, stride=1)
-        self.bn2 = nn.BatchNorm2d(16)  # Added batch normalization
+        self.bn2 = nn.BatchNorm2d(16)
 
-        # Calculate the correct input size for the linear layer
-        # For 8x8 input with the above architecture:
-        # After conv1: 7x7
-        # After pool1 (stride=1): 6x6
-        # After conv2: 5x5
-        # So the flattened size is 32 * 5 * 5 = 800
-        linear_input_size = 400
+        # compute flattened size: input 8x8 -> conv1->7x7->pool->6x6->conv2->5x5
+        linear_input_size = 16 * 5 * 5
 
-        self.fc1 = nn.Linear(linear_input_size, 128)  # Reduced size of first FC layer
-        self.fc2 = nn.Linear(128, 128)  # Reduced size of first FC layer
+        self.fc1 = nn.Linear(linear_input_size, 128)
+        self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, outputs)
-
-        # Dropout for regularization
         self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
-        # First convolutional layer
         x = F.relu(self.bn1(self.conv1(x)))
-
-        # Max pooling with stride=1 to avoid reducing dimensions too quickly
         x = F.max_pool2d(x, kernel_size=2, stride=1)
-
-        # Second convolutional layer
         x = F.relu(self.bn2(self.conv2(x)))
-
-        # Flatten
         x = x.view(x.size(0), -1)
-
-        # Fully connected layers with dropout
         x = F.relu(self.fc1(x))
         x = self.dropout(x)
         x = F.relu(self.fc2(x))
-
         return self.fc3(x)
 
 
 # ================ REPLAY MEMORY ================
-
 class ReplayMemory:
-    """Experience replay buffer"""
-
     def __init__(self, capacity):
         self.memory = deque([], maxlen=capacity)
 
     def push(self, *args):
-        self.memory.append(Config.Transition(*args))
+        self.memory.append(Transition(*args))
 
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
@@ -148,331 +59,191 @@ class ReplayMemory:
 
 
 # ================ AGENT ================
-
 class CNNDQNAgent:
-    """CNN-DQN Agent implementation"""
+    def __init__(
+        self,
+        gui_flag,
+        device,
+        gamma,
+        epsilon_start,
+        epsilon_min,
+        epsilon_decay,
+        tau,
+        lr,
+        batch_size,
+        replay_size,
+    ):
+        # setup environment
+        setup(GUI=gui_flag)
+        self.env = game
+        self.gui_flag = gui_flag
+        self.device = device
+        self.gamma = gamma
+        self.epsilon = epsilon_start
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+        self.tau = tau
+        self.lr = lr
+        self.batch_size = batch_size
 
-    step_counter = 0
+        self.n_actions = len(self.env.actions)
+        self.memory = ReplayMemory(replay_size)
 
-    def __init__(self, env, n_actions):
-        self.env = env
-        self.n_actions = n_actions
-        self.epsilon = Config.EPSILON_START
-
-        # Initialize networks
-        self.policy_net = CNNDQN(Config.IMAGE_HEIGHT, Config.IMAGE_WIDTH, n_actions).to(Config.DEVICE)
-        self.target_net = CNNDQN(Config.IMAGE_HEIGHT, Config.IMAGE_WIDTH, n_actions).to(Config.DEVICE)
+        # networks
+        self.policy_net = CNNDQN(3, self.env.grid_size, self.env.grid_size, self.n_actions).to(device)
+        self.target_net = CNNDQN(3, self.env.grid_size, self.env.grid_size, self.n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
-        # Initialize optimizer and memory
-        self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=Config.LEARNING_RATE, amsgrad=True)
-        self.memory = ReplayMemory(Config.REPLAY_MEMORY_SIZE)
-
-    def select_action(self, state):
-        """Select action using epsilon-greedy policy"""
-        if random.random() < self.epsilon:
-            action = torch.tensor([[self.env.action_space.sample()]],
-                                  device=Config.DEVICE, dtype=torch.long)
-            is_random = True
-        else:
-            with torch.no_grad():
-                action = self.policy_net(state).max(1).indices.view(1, 1)
-            is_random = False
-        return action, is_random
-
-    def get_screen(self):
-        """Capture screenshot from the Pygame display"""
-        surface = pygame.display.get_surface()
-
-        if surface is None:
-            return None
-
-        pixels = pygame.surfarray.array3d(surface)
-
-        # Convert to grayscale
-        gray_screen = np.mean(pixels, axis=2).astype(np.uint8)
-
-        # Resize to the desired dimensions
-        surf = pygame.surfarray.make_surface(gray_screen)
-        resized_surf = pygame.transform.scale(surf, (Config.IMAGE_WIDTH, Config.IMAGE_HEIGHT))
-        resized_screen = pygame.surfarray.array2d(resized_surf).astype(np.float32)
-
-        # Normalize pixel values to [0, 1]
-        normalized_screen = resized_screen / 255.0
-
-        # Convert to PyTorch tensor
-        screen_tensor = torch.tensor(normalized_screen, dtype=torch.float32, device=Config.DEVICE)
-        return screen_tensor.unsqueeze(0)  # Add batch dimension
-
-    def stack_frames(self, new_frame, reset=False):
-        """Stack frames to create the state"""
-        if reset or len(self.frame_buffer) == 0:
-            # Initialize buffer with copies of the first frame
-            for _ in range(Config.STACKED_FRAMES):
-                self.frame_buffer.append(new_frame)
-        else:
-            # Add new frame to the buffer
-            self.frame_buffer.append(new_frame)
-
-        # Stack frames into a single tensor [stacked_frames, H, W]
-        stacked_frames = torch.cat(list(self.frame_buffer), dim=0)
-        return stacked_frames.unsqueeze(0)  # Add batch dimension
+        self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=lr, amsgrad=True)
 
     def process_observation(self):
-        """
-        Create a multi-channel grid representation:
-          - Channel 0: Walls (1 for wall, 0 otherwise)
-          - Channel 1: Agent (1 at the agent's position, 0 otherwise)
-          - Channel 2: Goal (1 at the goal position, 0 otherwise)
-        """
-        grid_size = self.env.grid_size
+        G = self.env.grid_size
+        walls = np.zeros((G, G), dtype=np.float32)
+        agent = np.zeros((G, G), dtype=np.float32)
+        goal = np.zeros((G, G), dtype=np.float32)
+        for (i, j) in self.env.wall_positions:
+            walls[i, j] = 1.0
+        pi, pj = self.env.current_state['player_position']
+        agent[pi, pj] = 1.0
+        gi, gj = self.env.goal_room
+        goal[gi, gj] = 1.0
+        return np.stack([walls, agent, goal], axis=0)
 
-        # Initialize empty grids for each channel
-        walls_channel = np.zeros((grid_size, grid_size), dtype=np.float32)
-        agent_channel = np.zeros((grid_size, grid_size), dtype=np.float32)
-        goal_channel = np.zeros((grid_size, grid_size), dtype=np.float32)
+    def get_state_tensor(self):
+        grid = self.process_observation()
+        t = torch.tensor(grid, dtype=torch.float32, device=self.device).unsqueeze(0)
+        return t
 
-        # Fill in the walls channel
-        for pos in self.env.wall_positions:
-            i, j = pos
-            walls_channel[i, j] = 1.0
-
-        # Mark the agent's position
-        agent_i, agent_j = self.env.current_state['player_position']
-        agent_channel[agent_i, agent_j] = 1.0
-
-        # Mark the goal position
-        goal_i, goal_j = self.env.goal_room
-        goal_channel[goal_i, goal_j] = 1.0
-
-        # Stack the channels: resulting shape will be [3, grid_size, grid_size]
-        grid_representation = np.stack([walls_channel, agent_channel, goal_channel], axis=0)
-        return grid_representation
-
-    def get_env_tensor(self):
-        """Convert the processed observation into a tensor for the CNN.
-        This version works directly with the 8x8 grid without resizing.
-        """
-        grid_matrix = self.process_observation()  # Shape: [3, grid_size, grid_size]
-
-        # Convert to PyTorch tensor
-        grid_tensor = torch.tensor(grid_matrix, dtype=torch.float32, device=Config.DEVICE)
-
-        # No need to resize if we're using the native 8x8 grid
-        # Just add a batch dimension: [1, 3, 8, 8]
-        return grid_tensor.unsqueeze(0)
-
-    def get_state_tensor(self, reset=False):
-        """Obtain the current state as a tensor without frame stacking."""
-        return self.get_env_tensor()
+    def select_action(self, state):
+        if random.random() < self.epsilon:
+            return torch.tensor([[self.env.action_space.sample()]], device=self.device, dtype=torch.long), True
+        with torch.no_grad():
+            return self.policy_net(state).max(1)[1].view(1, 1), False
 
     def optimize_model(self):
-        """Perform one step of optimization with Double DQN implementation"""
-        if len(self.memory) < Config.BATCH_SIZE:
+        if len(self.memory) < self.batch_size:
             return None
-
-        # Sample transitions
-        transitions = self.memory.sample(Config.BATCH_SIZE)
-        batch = Config.Transition(*zip(*transitions))
-
-        # Create mask for non-final states
+        transitions = self.memory.sample(self.batch_size)
+        batch = Transition(*zip(*transitions))
         non_final_mask = torch.tensor(
-            tuple(s is not None for s in batch.next_state),
-            device=Config.DEVICE, dtype=torch.bool
+            [s is not None for s in batch.next_state], device=self.device, dtype=torch.bool
         )
-
-        # Prepare batch data
-        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+        non_final_next = torch.cat([s for s in batch.next_state if s is not None])
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
 
-        # Get current Q values
-        state_action_values = self.policy_net(state_batch).gather(1, action_batch)
-
-        # Compute target Q values using Double DQN approach
-        next_state_values = torch.zeros(Config.BATCH_SIZE, device=Config.DEVICE)
-
-        if non_final_mask.sum() > 0:  # Only if there are non-final states
+        state_action = self.policy_net(state_batch).gather(1, action_batch)
+        next_vals = torch.zeros(self.batch_size, device=self.device)
+        if non_final_mask.sum() > 0:
             with torch.no_grad():
-                # Double DQN: use policy_net to select actions
-                next_action_indices = self.policy_net(non_final_next_states).max(1)[1].unsqueeze(1)
-                # Use target_net to evaluate those actions
-                next_state_values[non_final_mask] = self.target_net(
-                    non_final_next_states).gather(1, next_action_indices).squeeze(1)
+                next_actions = self.policy_net(non_final_next).max(1)[1].unsqueeze(1)
+                next_vals[non_final_mask] = self.target_net(non_final_next).gather(1, next_actions).squeeze(1)
+        expected = reward_batch + self.gamma * next_vals
+        loss = F.mse_loss(state_action, expected.unsqueeze(1))
 
-        # Compute expected Q values
-        expected_state_action_values = (next_state_values * Config.GAMMA) + reward_batch
-
-        # Compute loss
-        criterion = nn.MSELoss()
-        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
-
-        # Optimize
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0)
         self.optimizer.step()
-
         return loss.item()
 
-    def soft_update_target_network(self):
-        """Soft update target network"""
-        target_dict = self.target_net.state_dict()
-        policy_dict = self.policy_net.state_dict()
-
-        for key in policy_dict:
-            target_dict[key] = policy_dict[key] * Config.TAU + target_dict[key] * (1 - Config.TAU)
-
-        self.target_net.load_state_dict(target_dict)
+    def soft_update(self):
+        for t, p in zip(self.target_net.parameters(), self.policy_net.parameters()):
+            t.data.copy_(t.data * (1.0 - self.tau) + p.data * self.tau)
 
     def decay_epsilon(self):
-        """Decay exploration rate"""
-        self.epsilon = max(Config.EPSILON_MIN, self.epsilon * Config.EPSILON_DECAY)
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
-    def save_model(self, suffix=""):
-        """Save the trained model"""
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        model_filename = f'cnn_dqn_model_{timestamp}{suffix}.pth'
-        torch.save(self.policy_net.state_dict(), model_filename)
-        return model_filename
+    def train(self, episodes, log_dir):
+        writer = SummaryWriter(log_dir)
+        total_loss = 0.0
+        steps = 0
+        for ep in range(episodes):
+            obs, reward, done, _ = self.env.reset()
+            state = self.get_state_tensor()
+            ep_reward, ep_steps = 0, 0
+            writer.add_scalar('Epsilon', self.epsilon, ep)
+            while not done:
+                action, _ = self.select_action(state)
+                obs, reward, done, info = self.env.step(action)
+                next_state = None if done else self.get_state_tensor()
+                self.memory.push(state, action, next_state, torch.tensor([reward], device=self.device))
+                state = next_state
 
-    def load_model(self, filename):
-        """Load a saved model"""
-        self.policy_net.load_state_dict(torch.load(filename, map_location=Config.DEVICE))
-        self.target_net.load_state_dict(self.policy_net.state_dict())
+                loss = self.optimize_model()
+                if loss is not None:
+                    total_loss += loss
+                    steps += 1
+                    writer.add_scalar('Loss', total_loss / steps, steps)
+                self.soft_update()
+                ep_reward += reward
+                ep_steps += 1
+                if self.gui_flag:
+                    refresh(obs, reward, done, info)
 
-
-# ================ TRAINING ================
-
-def train(agent, num_episodes, writer):
-    """Train the agent"""
-    # Track all losses for global metrics
-    total_loss = 0.0
-    steps = 1
-
-    for episode in range(num_episodes):
-        # Reset environment
-        obs, reward, done, info = agent.env.reset()
-
-        # Get initial state
-        state = agent.get_state_tensor(reset=True)
-
-        if state is None:
-            print("Warning: Could not get initial screen. Ensure GUI is enabled.")
-            continue
-
-        # Episode tracking
-        episode_reward = 0
-        episode_step = 1
-
-        # Log epsilon
-        writer.add_scalar("Epsilon/episode", agent.epsilon, episode)
-
-        # Episode loop
-        for t in count():
-            # Select and perform action
-            action, _ = agent.select_action(state)
-            obs, reward, done, info = agent.env.step(action)
-
-            # Update display using vis_gym's refresh function
-            # refresh(obs, reward, done, info)
-
-            reward_tensor = torch.tensor([reward], device=Config.DEVICE)
-            episode_reward += reward
-
-            # Process next state
-            next_state = None if done else agent.get_state_tensor()
-
-            # Store transition and optimize
-            agent.memory.push(state, action, next_state, reward_tensor)
-            state = next_state
-
-            # Optimize model and track loss
-            loss_value = agent.optimize_model()
-            steps += 1
-            if loss_value is not None:
-                total_loss += loss_value
-
-                # Log step-wise loss (per optimization step)
-                writer.add_scalar("Loss/step", total_loss / steps, steps)
-
-            # Update target network
-            agent.soft_update_target_network()
-            episode_step += 1
-
-            # Episode end handling
-            if done:
-                # Calculate and log episode metrics
-                writer.add_scalar("Reward/episode", episode_reward / episode_step, episode + 1)
-                writer.add_scalar("Step/episode", steps / (episode + 1), episode + 1)
-                writer.add_scalar("Loss/episode_avg", total_loss / (episode + 1), episode + 1)
-
-                print(
-                    f"Episode {episode + 1}: {episode_step} steps, Reward: {episode_reward}, Epsilon: {agent.epsilon:.4f}"
-                )
-                break
-
-        # Decay epsilon
-        agent.decay_epsilon()
-
-    # Save model
-    return agent.save_model()
-
-
-# ================ EVALUATION ================
-
-def evaluate(agent, num_episodes):
-    """Evaluate the agent"""
-    agent.policy_net.eval()
-
-    for episode in range(num_episodes):
-        obs, reward, done, info = agent.env.reset()
-        refresh(obs, reward, done, info)
-        state = agent.get_state_tensor(reset=True)
-        total_reward = 0
-
-        while True:
-            # Select best action
-            with torch.no_grad():
-                action = agent.policy_net(state).max(1).indices.view(1, 1)
-
-            # Step environment
-            obs, reward, done, info = agent.env.step(action)
-
-            # Update display
-            refresh(obs, reward, done, info)
-
-            total_reward += reward
-
-            if done:
-                print(f"Eval Episode {episode + 1}: Reward = {total_reward}")
-                break
-
-            state = agent.get_state_tensor()
-
-
-# ================ MAIN FUNCTION ================
-
-def main():
-    """Main entry point"""
-    # Setup
-    TRAIN_MODE = True
-
-    env, n_actions = setup_environment()
-    agent = CNNDQNAgent(env, n_actions)
-
-    if TRAIN_MODE:
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        log_dir = f"runs/cnn_dqn_{timestamp}"
-        writer = SummaryWriter(log_dir=log_dir)
-        model_path = train(agent, Config.TRAIN_EPISODES, writer)
+            writer.add_scalar('Reward', ep_reward, ep)
+            writer.add_scalar('Steps', ep_steps, ep)
+            self.decay_epsilon()
+            print(f"Episode {ep+1}/{episodes}, Steps: {ep_steps}, Reward: {ep_reward}, Epsilon: {self.epsilon:.4f}")
         writer.close()
-        print(f"Training completed. Model saved to {model_path}")
+        model_file = f"cnn_dqn_{int(time.time())}.pth"
+        torch.save(self.policy_net.state_dict(), model_file)
+        print(f"Model saved to {model_file}")
+
+    def evaluate(self, episodes, model_path=None):
+        if model_path:
+            self.policy_net.load_state_dict(torch.load(model_path, map_location=self.device))
+        self.policy_net.eval()
+        for ep in range(episodes):
+            obs, reward, done, _ = self.env.reset()
+            state = self.get_state_tensor()
+            total_reward = 0
+            while not done:
+                with torch.no_grad():
+                    action = self.policy_net(state).max(1)[1].view(1,1)
+                obs, reward, done, info = self.env.step(action)
+                total_reward += reward
+                if self.gui_flag:
+                    refresh(obs, reward, done, info)
+                state = None if done else self.get_state_tensor()
+            print(f"Eval {ep+1}/{episodes}, Reward: {total_reward}")
+
+
+# ================ MAIN ================
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Train or evaluate a CNN-DQN agent on grid world.")
+    parser.add_argument('--mode', choices=['train', 'eval'], default='train', help="Mode: train or eval")
+    parser.add_argument('--episodes', type=int, default=3000, help="Number of episodes")
+    parser.add_argument('--gui', action='store_true', help="Enable GUI visualization")
+    parser.add_argument('--gamma', type=float, default=0.9, help="Discount factor")
+    parser.add_argument('--epsilon_start', type=float, default=1.0, help="Starting epsilon")
+    parser.add_argument('--epsilon_min', type=float, default=0.1, help="Minimum epsilon")
+    parser.add_argument('--epsilon_decay', type=float, default=0.9995, help="Epsilon decay rate")
+    parser.add_argument('--tau', type=float, default=0.005, help="Target network soft update parameter")
+    parser.add_argument('--lr', type=float, default=5e-4, help="Learning rate")
+    parser.add_argument('--batch_size', type=int, default=64, help="Batch size")
+    parser.add_argument('--replay_size', type=int, default=10000, help="Replay memory size")
+    parser.add_argument('--log_dir', type=str, default=None, help="Tensorboard log directory (train mode)")
+    parser.add_argument('--model_path', type=str, default=None, help="Path to saved model (eval mode)")
+    args = parser.parse_args()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    agent = CNNDQNAgent(
+        gui_flag=args.gui,
+        device=device,
+        gamma=args.gamma,
+        epsilon_start=args.epsilon_start,
+        epsilon_min=args.epsilon_min,
+        epsilon_decay=args.epsilon_decay,
+        tau=args.tau,
+        lr=args.lr,
+        batch_size=args.batch_size,
+        replay_size=args.replay_size,
+    )
+
+    if args.mode == 'train':
+        log_dir = args.log_dir or f"runs/cnn_dqn_{int(time.time())}"
+        agent.train(args.episodes, log_dir)
     else:
-        agent.load_model('cnn_dqn_model_20250404-182737.pth')
-        evaluate(agent, Config.EVAL_EPISODES)
-
-
-if __name__ == "__main__":
-    main()
+        agent.evaluate(args.episodes, args.model_path)
