@@ -163,25 +163,34 @@ class DynamicMazeGUI:
         pygame.draw.rect(self.screen, (70, 70, 150), body_rect)
 
     def display_end_message(self, message):
-        """Show pulsating end-game message with particles."""
+        """Show pulsating end-game message with fixed particles."""
+        # Pulsating alpha based on time
         pulse_value = abs(math.sin(pygame.time.get_ticks() / 300)) * 255
+        alpha = min(200, int(pulse_value))
+
+        # Create and draw the pulsating green bar
         goal_surface = pygame.Surface((self.WIDTH, 40), pygame.SRCALPHA)
-        goal_surface.fill((0, 100, 0, min(200, int(pulse_value))))
+        goal_surface.fill((0, 100, 0, alpha))
 
         font = pygame.font.SysFont(None, 22)
         text_surf = font.render(message, True, (255, 255, 0))
         text_rect = text_surf.get_rect(center=(self.WIDTH // 2, 20))
         goal_surface.blit(text_surf, text_rect)
-        self.screen.blit(goal_surface, (0, self.GRID_SIZE * self.CELL_SIZE - 40))
+        self.screen.blit(
+            goal_surface,
+            (0, self.GRID_SIZE * self.CELL_SIZE - 40)
+        )
 
-        if random.random() < 0.3:
-            for _ in range(5):
-                x = random.randint(0, self.WIDTH)
-                y = random.randint(self.GRID_SIZE * self.CELL_SIZE - 60,
-                                   self.GRID_SIZE * self.CELL_SIZE - 20)
-                size = random.randint(2, 5)
-                color = random.choice([(255, 255, 0), (0, 255, 0), (0, 255, 255), (255, 0, 255)])
-                pygame.draw.circle(self.screen, color, (x, y), size)
+        # Draw 5 fixed particles (evenly spaced, same size & color)
+        num_particles = 5
+        spacing = self.WIDTH // (num_particles + 1)
+        y_pos = self.GRID_SIZE * self.CELL_SIZE - 30
+        size = 3
+        color = (255, 255, 0)  # constant yellow
+
+        for i in range(1, num_particles + 1):
+            x = spacing * i
+            pygame.draw.circle(self.screen, color, (x, y_pos), size)
 
     def refresh(self, obs, reward, done, info, delay: float = 0.1):
         """Update visuals based on the latest game state."""
