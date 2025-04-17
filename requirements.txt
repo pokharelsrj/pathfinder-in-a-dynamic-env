@@ -1,0 +1,4 @@
+gym==0.26.2
+pygame==2.6.1
+tensorboard==2.19.0
+torch==2.6.0
