@@ -163,7 +163,7 @@ class CDQNAgent:
         print(f"Training complete, model saved to {fname}")
 
     def play(self, num_episodes: int, model_path: str):
-        path = os.path.join(os.path.dirname(__file__), model_path)
+        path = os.path.join(os.path.dirname(__file__), "trained_model", model_path)
         self.policy_net.load_state_dict(torch.load(path, map_location=self.device))
         self.policy_net.eval()
 

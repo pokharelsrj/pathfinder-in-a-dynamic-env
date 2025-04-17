@@ -115,12 +115,12 @@ class QLearningAgent:
         return self.Q_table
 
     def save(self, filename='Q_table_random_goal.pickle'):
-        path = os.path.join(os.path.dirname(__file__), filename)
+        path = os.path.join(os.path.dirname(__file__), "trained_model", filename)
         with open(path, 'wb') as handle:
             pickle.dump(self.Q_table, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def load(self, filename='Q_table_random_goal.pickle'):
-        path = os.path.join(os.path.dirname(__file__), filename)
+        path = os.path.join(os.path.dirname(__file__), "trained_model", filename)
         with open(path, 'rb') as handle:
             self.Q_table = pickle.load(handle)
 
