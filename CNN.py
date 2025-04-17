@@ -47,7 +47,7 @@ class Config:
     # Training settings
     REPLAY_MEMORY_SIZE = 10000
     TRAIN_EPISODES = 3000
-    EVAL_EPISODES = 100
+    EVAL_EPISODES = 2000
 
     # Data structures
     Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
