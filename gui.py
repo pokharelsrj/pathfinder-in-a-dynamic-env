@@ -17,12 +17,8 @@ class DynamicMazeGUI:
 
         # Colors
         self.WHITE = (255, 255, 255)
-        self.BLACK = (0, 0, 0)
-        self.GREEN = (0, 255, 0)
-        self.BLUE = (0, 0, 255)
         self.GRAY = (200, 200, 200)
-        self.DARK_GRAY = (50, 50, 50)
-        self.YELLOW = (255, 255, 0)
+        self.BLACK = (0, 0, 0)
 
         # Pygame screen and state
         self.screen = None
