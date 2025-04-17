@@ -8,10 +8,9 @@ import torch
 import torch.nn.functional as F
 from CDQN import CDQN
 from ReplayMemory import ReplayMemory
+from environment import DynamicMazeGUI
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
-
-from vis_gym import setup, game, refresh
 
 
 class CDQNAgent:
@@ -31,8 +30,9 @@ class CDQNAgent:
             replay_size: int,
     ):
         # env setup
-        setup(GUI=gui_flag)
-        self.env = game
+        self.gui = DynamicMazeGUI(gui_flag)
+        self.gui.setup()
+        self.env = self.gui.game
 
         # device & exploration params
         self.device = device
@@ -167,7 +167,7 @@ class CDQNAgent:
 
         for ep in range(num_episodes):
             obs, _, done, _ = self.env.reset()
-            refresh(obs, 0, done, {})
+            self.gui.refresh(obs, 0, done, {})
             state = self.process_observation()
             total_reward = 0
 
@@ -175,7 +175,7 @@ class CDQNAgent:
                 with torch.no_grad():
                     action = self.policy_net(state).max(1).indices.view(1, 1)
                 obs, reward, done, _ = self.env.step(action)
-                refresh(obs, reward, done, {})
+                self.gui.refresh(obs, reward, done, {})
                 total_reward += reward
                 state = self.process_observation()
 
