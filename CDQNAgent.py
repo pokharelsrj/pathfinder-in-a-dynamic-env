@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from CDQN import CDQN
 from ReplayMemory import ReplayMemory
-from environment import DynamicMazeGUI
+from gui import DynamicMazeGUI
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 

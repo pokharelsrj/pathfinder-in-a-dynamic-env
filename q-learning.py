@@ -3,7 +3,7 @@ import hashlib
 import random
 import pickle
 import numpy as np
-from environment import *
+from gui import *
 
 
 class QLearningAgent:
