@@ -186,7 +186,7 @@ class CDQNAgent:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train or evaluate a CNN-DQN agent on grid world.")
-    parser.add_argument('--mode', choices=['train', 'eval'], default='eval')
+    parser.add_argument('--mode', choices=['train', 'play'], default='play')
     parser.add_argument('--episodes', type=int, default=200)
     parser.add_argument('--gui', action='store_true')
     parser.add_argument('--gamma', type=float, default=0.9)
