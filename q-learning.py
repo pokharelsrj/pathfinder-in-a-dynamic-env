@@ -3,7 +3,7 @@ import hashlib
 import random
 import pickle
 import numpy as np
-from vis_gym import *
+from environment import *
 
 
 class QLearningAgent:
@@ -153,7 +153,7 @@ if __name__ == "__main__":
                         help="Mode: 'train' to train, 'play' to run with a saved Q-table")
     parser.add_argument('--episodes', type=int, default=5000,
                         help="Number of episodes for training or playing")
-    parser.add_argument('--gui', action='store_true', help="Enable GUI visualization")
+    parser.add_argument('--gui', action='store_true', help="Enable GUI visualization", default=True)
     parser.add_argument('--gamma', type=float, default=0.9,
                         help="Discount factor for Q-learning")
     parser.add_argument('--epsilon', type=float, default=1.0,

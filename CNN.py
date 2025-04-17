@@ -12,7 +12,7 @@ from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
-from vis_gym import *
+from environment import *
 
 
 # ================ CONFIGURATION ================
@@ -21,7 +21,7 @@ class Config:
     """Modified configuration parameters for 8x8 grid"""
 
     # Environment settings
-    GUI_ENABLED = False  # Can be False since we're using grid representation now
+    GUI_ENABLED = True  # Can be False since we're using grid representation now
 
     # Hardware settings
     DEVICE = torch.device(
