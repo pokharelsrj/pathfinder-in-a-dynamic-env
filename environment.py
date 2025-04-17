@@ -1,141 +1,218 @@
-'''
-RULES:-
-
-Player Movement:
-Players can move using arrow keys (← ↑ → ↓)
-
-Environment:
-Hard walls block movement
-Soft walls teleport the player to a random adjacent cell and reduce health by 10%
-Dynamic Obstacles: Every 3 moves, a new set of obstacles is generated
-Game Ending Conditions:
-If health reaches 0%, the game ends.
-If the player reaches the goal, they win.
-'''
 import pygame
+import sys
+import time
 import random
+import math
+from gui import DynamicMazeEnv  # Import the updated DynamicMazeEnv
 
-# Initialize pygame
-pygame.init()
 
-# Grid and Display Config
-GRID_SIZE = 50
-CELL_SIZE = 15
-WIDTH, HEIGHT = GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE
-FPS = 10
+class DynamicMazeGUI:
+    def __init__(self, gui: bool = True):
+        # Game and grid configuration
+        self.game = DynamicMazeEnv()
+        self.GRID_SIZE = self.game.grid_size
+        self.CELL_SIZE = 500 // self.GRID_SIZE  # pixels per cell
+        self.WIDTH = self.GRID_SIZE * self.CELL_SIZE
+        self.HEIGHT = self.GRID_SIZE * self.CELL_SIZE
 
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GREEN = (0, 255, 0)
-RED = (255, 0, 0)
-BLUE = (0, 0, 255)
-GRAY = (100, 100, 100)
-ORANGE = (255, 165, 0)
-YELLOW = (255, 255, 0)
+        # Colors
+        self.WHITE = (255, 255, 255)
+        self.BLACK = (0, 0, 0)
+        self.GREEN = (0, 255, 0)
+        self.BLUE = (0, 0, 255)
+        self.GRAY = (200, 200, 200)
+        self.DARK_GRAY = (50, 50, 50)
+        self.YELLOW = (255, 255, 0)
 
-# Game Constants
-START_POS = (0, 0)
-GOAL_POS = (49, 49)
-HARD_OBSTACLE = 1
-SOFT_OBSTACLE = 2
-OBSTACLE_RATIO = 0.55  # 55% of the grid
+        # Pygame screen and state
+        self.screen = None
+        self.game_ended = False
+        self.action_results = [None, None, None, None, None]
 
-# Initialize Screen
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Dynamic Grid Pathfinder")
+        # Timing
+        self.fps = 10
+        self.sleeptime = 0.1
+        self.clock = None
 
-# Player State
-player_pos = list(START_POS)
-player_health = 100
-move_count = 0
+        if gui:
+            self.setup()
 
-# Generate Initial Obstacles
-def generate_obstacles():
-    obstacles = [[0] * GRID_SIZE for _ in range(GRID_SIZE)]
-    total_obstacles = int(GRID_SIZE * GRID_SIZE * OBSTACLE_RATIO)
-    
-    placed = 0
-    while placed < total_obstacles:
-        x, y = random.randint(0, GRID_SIZE-1), random.randint(0, GRID_SIZE-1)
-        if (x, y) in [START_POS, GOAL_POS]:  
-            continue  
-        if obstacles[x][y] == 0:
-            obstacles[x][y] = random.choice([HARD_OBSTACLE, SOFT_OBSTACLE])
-            placed += 1
-    return obstacles
+    def setup(self):
+        """Initialize Pygame and create window."""
+        pygame.init()
+        # Extra 50 pixels for messages
+        self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT + 50))
+        pygame.display.set_caption("Dynamic Maze Environment")
 
-obstacles = generate_obstacles()
+    def position_to_grid(self, position):
+        """Convert (row, col) to pixel (x, y)."""
+        row, col = position
+        return col * self.CELL_SIZE, row * self.CELL_SIZE
 
-# Draw the Grid
-def draw_grid():
-    screen.fill(WHITE)
-    for x in range(GRID_SIZE):
-        for y in range(GRID_SIZE):
-            rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-            if (x, y) == tuple(player_pos):
-                pygame.draw.rect(screen, BLUE, rect)  # Player
-            elif (x, y) == GOAL_POS:
-                pygame.draw.rect(screen, GREEN, rect)  # Goal
-            elif obstacles[x][y] == HARD_OBSTACLE:
-                pygame.draw.rect(screen, BLACK, rect)  # Hard Wall
-            elif obstacles[x][y] == SOFT_OBSTACLE:
-                pygame.draw.rect(screen, RED, rect)  # Soft Wall
-            pygame.draw.rect(screen, BLACK, rect, 1)
+    def draw_grid(self):
+        """Draw grid lines and console shading."""
+        for x in range(0, self.WIDTH, self.CELL_SIZE):
+            for y in range(0, self.HEIGHT, self.CELL_SIZE):
+                rect = pygame.Rect(x, y, self.CELL_SIZE, self.CELL_SIZE)
+                pygame.draw.rect(self.screen, self.BLACK, rect, 1)
+        # Shade extra console area (unused)
+        rect = pygame.Rect(0, self.HEIGHT + 100, self.WIDTH, self.HEIGHT)
+        pygame.draw.rect(self.screen, self.GRAY, rect)
 
-    # Display Health, Uncomment if need to add extra complexity  
-    '''font = pygame.font.Font(None, 30)
-    health_text = font.render(f"Health: {player_health}%", True, BLUE)
-    screen.blit(health_text, (10, HEIGHT - 30))'''
+    def draw_goal_room(self):
+        """Highlight the goal room with concentric circles."""
+        x, y = self.position_to_grid(self.game.goal_room)
+        center_x = x + self.CELL_SIZE // 2
+        center_y = y + self.CELL_SIZE // 2
 
-# Handle Movement
-def move_player(dx, dy):
-    global move_count, player_health, obstacles
+        outer_radius = int(self.CELL_SIZE * 0.4)
+        inner_radius = outer_radius // 2
 
-    new_x, new_y = player_pos[0] + dx, player_pos[1] + dy
-    if 0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE:
-        if obstacles[new_x][new_y] == HARD_OBSTACLE:
-            return  
-        elif obstacles[new_x][new_y] == SOFT_OBSTACLE:
-            player_health -= 10  
-            if player_health <= 0:
-                return "Game Over"
-            adj_cells = [(new_x + dx, new_y + dy) for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]]
-            adj_cells = [(x, y) for x, y in adj_cells if 0 <= x < GRID_SIZE and 0 <= y < GRID_SIZE]
-            if adj_cells:
-                player_pos[:] = random.choice(adj_cells)
+        pygame.draw.circle(self.screen, (255, 0, 0), (center_x, center_y), outer_radius)
+        pygame.draw.circle(self.screen, (225, 255, 255), (center_x, center_y), inner_radius)
+        pygame.draw.circle(self.screen, (255, 0, 0), (center_x, center_y), inner_radius // 2)
+
+    def draw_walls(self):
+        """Render brick-patterned walls at wall positions."""
+        brick_color = (139, 69, 19)
+        mortar_color = (169, 169, 169)
+        for wall in self.game.wall_positions:
+            x, y = self.position_to_grid(wall)
+            rect = pygame.Rect(x + 2, y + 2, self.CELL_SIZE - 4, self.CELL_SIZE - 4)
+            pygame.draw.rect(self.screen, mortar_color, rect)
+
+            mortar_thickness = max(1, min(rect.width, rect.height) // 25)
+            brick_height = rect.height // 3
+            brick_width = rect.width // 2
+
+            for brick_row in range((rect.height // brick_height) + 1):
+                y_pos = rect.y + brick_row * brick_height
+                x_offset = brick_width // 2 if brick_row % 2 else 0
+
+                for brick_col in range(-1, (rect.width // brick_width) + 2):
+                    x_pos = rect.x + x_offset + brick_col * brick_width
+                    brick = pygame.Rect(
+                        x_pos + mortar_thickness,
+                        y_pos + mortar_thickness,
+                        brick_width - mortar_thickness * 2,
+                        brick_height - mortar_thickness * 2
+                    )
+
+                    # Clip to cell
+                    if brick.right > rect.left and brick.left < rect.right and \
+                            brick.bottom > rect.top and brick.top < rect.bottom:
+                        if brick.left < rect.left:
+                            brick.width -= (rect.left - brick.left)
+                            brick.left = rect.left
+                        if brick.right > rect.right:
+                            brick.width = rect.right - brick.left
+                        if brick.top < rect.top:
+                            brick.height -= (rect.top - brick.top)
+                            brick.top = rect.top
+                        if brick.bottom > rect.bottom:
+                            brick.height = rect.bottom - brick.top
+
+                        if brick.width > 0 and brick.height > 0:
+                            pygame.draw.rect(self.screen, brick_color, brick)
+
+    def draw_player(self, position):
+        """Render the player as a simple robot figure."""
+        center_x = position[1] * self.CELL_SIZE + self.CELL_SIZE // 2
+        center_y = position[0] * self.CELL_SIZE + self.CELL_SIZE // 2
+        size = self.CELL_SIZE // 3
+
+        # Head
+        head_rect = pygame.Rect(
+            center_x - size, center_y - size, size * 2, size * 2
+        )
+        pygame.draw.rect(self.screen, (100, 100, 180), head_rect)
+
+        # Eyes
+        eye_width = size // 2
+        eye_height = size // 3
+        eye_y = center_y - size // 2
+        left_eye = pygame.Rect(
+            center_x - size // 2 - eye_width // 2, eye_y, eye_width, eye_height
+        )
+        right_eye = pygame.Rect(
+            center_x + size // 2 - eye_width // 2, eye_y, eye_width, eye_height
+        )
+        pygame.draw.rect(self.screen, (255, 255, 0), left_eye)
+        pygame.draw.rect(self.screen, (255, 255, 0), right_eye)
+
+        # Antenna
+        pygame.draw.line(
+            self.screen, (200, 0, 0),
+            (center_x, center_y - size),
+            (center_x, center_y - size - size // 2), 3
+        )
+        pygame.draw.circle(
+            self.screen, (200, 0, 0),
+            (center_x, center_y - size - size // 2), size // 4
+        )
+
+        # Mouth and body
+        pygame.draw.line(
+            self.screen, (50, 50, 50),
+            (center_x - size // 2, center_y + size // 2),
+            (center_x + size // 2, center_y + size // 2), 2
+        )
+        body_rect = pygame.Rect(
+            center_x - size * 0.75, center_y + size, size * 1.5, size
+        )
+        pygame.draw.rect(self.screen, (70, 70, 150), body_rect)
+
+    def display_end_message(self, message):
+        """Show pulsating end-game message with particles."""
+        pulse_value = abs(math.sin(pygame.time.get_ticks() / 300)) * 255
+        goal_surface = pygame.Surface((self.WIDTH, 40), pygame.SRCALPHA)
+        goal_surface.fill((0, 100, 0, min(200, int(pulse_value))))
+
+        font = pygame.font.SysFont(None, 22)
+        text_surf = font.render(message, True, (255, 255, 0))
+        text_rect = text_surf.get_rect(center=(self.WIDTH // 2, 20))
+        goal_surface.blit(text_surf, text_rect)
+        self.screen.blit(goal_surface, (0, self.GRID_SIZE * self.CELL_SIZE - 40))
+
+        if random.random() < 0.3:
+            for _ in range(5):
+                x = random.randint(0, self.WIDTH)
+                y = random.randint(self.GRID_SIZE * self.CELL_SIZE - 60,
+                                   self.GRID_SIZE * self.CELL_SIZE - 20)
+                size = random.randint(2, 5)
+                color = random.choice([(255, 255, 0), (0, 255, 0), (0, 255, 255), (255, 0, 255)])
+                pygame.draw.circle(self.screen, color, (x, y), size)
+
+    def refresh(self, obs, reward, done, info, delay: float = 0.1):
+        """Update visuals based on the latest game state."""
+        action = info.get('action', "None")
+        result = f"Pos: {obs['player_position']}, Reward: {reward}, Action: {action}"
+
+        # Maintain a rolling action history
+        if None in self.action_results:
+            self.action_results[self.action_results.index(None)] = result
         else:
-            player_pos[:] = [new_x, new_y]
+            self.action_results.pop(0)
+            self.action_results.append(result)
 
-    move_count += 1
-    if move_count % 3 == 0:
-        obstacles = generate_obstacles()  
+        self.fps = 60
+        self.clock = pygame.time.Clock()
 
-# Game Loop
-running = True
-while running:
-    pygame.time.delay(100)
-    draw_grid()
-    pygame.display.update()
+        self.screen.fill(self.WHITE)
+        self.draw_grid()
+        self.draw_goal_room()
+        self.draw_walls()
+        self.draw_player(self.game.current_state['player_position'])
 
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                status = move_player(-1, 0)
-            elif event.key == pygame.K_RIGHT:
-                status = move_player(1, 0)
-            elif event.key == pygame.K_UP:
-                status = move_player(0, -1)
-            elif event.key == pygame.K_DOWN:
-                status = move_player(0, 1)
+        if self.game.is_terminal() == 'goal':
+            self.game_ended = True
+            self.display_end_message("GOAL REACHED!")
 
-            if player_health <= 0:
-                print("Game Over, Better Luck Next Time :)")
-                running = False
-            elif tuple(player_pos) == GOAL_POS:
-                print("Congratulations, You reached the goal :P")
-                running = False
+        pygame.display.flip()
+        self.clock.tick(self.fps)
+        time.sleep(self.sleeptime)
 
-pygame.quit()
+
+if __name__ == "__main__":
+    gui = DynamicMazeGUI()
+    gui.setup()

@@ -12,7 +12,7 @@ from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
-from vis_gym import *
+from environment import *
 
 
 # ================ CONFIGURATION ================
