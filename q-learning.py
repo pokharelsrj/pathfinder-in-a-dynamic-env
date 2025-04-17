@@ -153,7 +153,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train or play with QLearningAgent.")
     parser.add_argument('--mode', choices=['train', 'play'], default='play',
                         help="Mode: 'train' to train, 'play' to run with a saved Q-table")
-    parser.add_argument('--episodes', type=int, default=5000,
+    parser.add_argument('--episodes', type=int, default=1000000,
                         help="Number of episodes for training or playing")
     parser.add_argument('--gui', action='store_true', help="Enable GUI visualization")
     parser.add_argument('--gamma', type=float, default=0.9,
@@ -162,7 +162,7 @@ if __name__ == "__main__":
                         help="Initial exploration rate")
     parser.add_argument('--decay_rate', type=float, default=0.999999,
                         help="Epsilon decay rate per episode")
-    parser.add_argument('--qtable', type=str, default='Q_table_random_goal.pickle',
+    parser.add_argument('--qtable', type=str,
                         help="Path to save/load the Q-table")
     parser.add_argument('--fixed_goal', action='store_true')
 

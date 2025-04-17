@@ -8,6 +8,7 @@ class DynamicMazeEnv(gym.Env):
 
     def __init__(self, random_goal=True, grid_size=8, wall_percent=0.3):
         super(DynamicMazeEnv, self).__init__()
+        print(random_goal)
         # Flags and parameters
         self.random_goal = random_goal
         self.grid_size = grid_size
