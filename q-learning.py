@@ -8,8 +8,8 @@ from gui import *
 
 class QLearningAgent:
     def __init__(self, gamma=0.9, epsilon=1.0,
-                 decay_rate=0.999999, gui_flag=False):
-        self.gui = DynamicMazeGUI(gui_flag)
+                 decay_rate=0.999999, gui_flag=False, fixed_goal=False):
+        self.gui = DynamicMazeGUI(gui_flag, fixed_goal)
         self.gui.setup()
 
         self.env = self.gui.game
@@ -114,11 +114,11 @@ class QLearningAgent:
 
         return self.Q_table
 
-    def save(self, filename='Q_table.pickle'):
+    def save(self, filename='Q_table_random_goal.pickle'):
         with open(filename, 'wb') as handle:
             pickle.dump(self.Q_table, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def load(self, filename='Q_table.pickle'):
+    def load(self, filename='Q_table_random_goal.pickle'):
         with open(filename, 'rb') as handle:
             self.Q_table = pickle.load(handle)
 
@@ -155,22 +155,24 @@ if __name__ == "__main__":
                         help="Mode: 'train' to train, 'play' to run with a saved Q-table")
     parser.add_argument('--episodes', type=int, default=5000,
                         help="Number of episodes for training or playing")
-    parser.add_argument('--gui', action='store_true', help="Enable GUI visualization", default=True)
+    parser.add_argument('--gui', action='store_true', help="Enable GUI visualization")
     parser.add_argument('--gamma', type=float, default=0.9,
                         help="Discount factor for Q-learning")
     parser.add_argument('--epsilon', type=float, default=1.0,
                         help="Initial exploration rate")
     parser.add_argument('--decay_rate', type=float, default=0.999999,
                         help="Epsilon decay rate per episode")
-    parser.add_argument('--qtable', type=str, default='Q_table.pickle',
+    parser.add_argument('--qtable', type=str, default='Q_table_random_goal.pickle',
                         help="Path to save/load the Q-table")
+    parser.add_argument('--fixed_goal', action='store_true')
 
     args = parser.parse_args()
     agent = QLearningAgent(
         gamma=args.gamma,
         epsilon=args.epsilon,
         decay_rate=args.decay_rate,
-        gui_flag=args.gui
+        gui_flag=args.gui,
+        fixed_goal=args.fixed_goal
     )
 
     if args.mode == 'train':

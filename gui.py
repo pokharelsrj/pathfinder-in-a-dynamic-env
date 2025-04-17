@@ -7,9 +7,9 @@ from environment import DynamicMazeEnv  # Import the updated DynamicMazeEnv
 
 
 class DynamicMazeGUI:
-    def __init__(self, gui: bool = True):
+    def __init__(self, gui=True, fixed_goal=False):
         # Game and grid configuration
-        self.game = DynamicMazeEnv()
+        self.game = DynamicMazeEnv(random_goal=not fixed_goal)
         self.GRID_SIZE = self.game.grid_size
         self.CELL_SIZE = 500 // self.GRID_SIZE  # pixels per cell
         self.WIDTH = self.GRID_SIZE * self.CELL_SIZE
