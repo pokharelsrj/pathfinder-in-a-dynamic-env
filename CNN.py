@@ -21,7 +21,7 @@ class Config:
     """Modified configuration parameters for 8x8 grid"""
 
     # Environment settings
-    GUI_ENABLED = True  # Can be False since we're using grid representation now
+    GUI_ENABLED = False  # Can be False since we're using grid representation now
 
     # Hardware settings
     DEVICE = torch.device(

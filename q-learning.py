@@ -9,8 +9,10 @@ from environment import *
 class QLearningAgent:
     def __init__(self, gamma=0.9, epsilon=1.0,
                  decay_rate=0.999999, gui_flag=False):
-        setup(GUI=gui_flag)
-        self.env = game
+        self.gui = DynamicMazeGUI(gui_flag)
+        self.gui.setup()
+
+        self.env = self.gui.game
         self.gui_flag = gui_flag
         self.grid_size = self.env.grid_size
         self.gamma = gamma
@@ -76,7 +78,7 @@ class QLearningAgent:
                 )
 
                 if self.gui_flag:
-                    refresh(obs, reward, done, info)
+                    self.gui.refresh(obs, reward, done, info)
 
                 action = info.get('action')
                 index = self.env.actions.index(action)
@@ -140,7 +142,7 @@ class QLearningAgent:
                 total_reward += reward
                 total_step += 1
                 if self.gui_flag:
-                    refresh(obs, reward, done, info)
+                    self.gui.refresh(obs, reward, done, info)
 
         print(total_reward / episodes)
         print(total_step / episodes)
