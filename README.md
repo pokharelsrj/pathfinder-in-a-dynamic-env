@@ -1,22 +1,25 @@
 # Pathfinder Agent in Dynamic Environment
 
-<table>
-<tr>
-<td style="width:60%; vertical-align:top;">
+<div style="display: flex; align-items: flex-start; gap: 20px;">
+
+<div style="width: 60%;">
 
 This project focuses on developing a pathfinding agent capable of operating in **dynamic environments** such as forest fires, military operation zones, and construction sites. The agent is trained to adapt to real-time environmental changes, including moving obstacles and evolving hazards.
 
 A custom **OpenAI Gym environment** was developed to simulate these scenarios. We began with a basic **Q-learning** approach for initial experimentation and moved to a **Convolutional Deep Q-Network (DQN)** to enable scalability and performance in more complex settings.
 
-</td>
-<td style="width:50%; text-align:center;">
+</div>
+
+<div style="width: 40%; text-align: center;">
 
 <img src="assets/agent_demo.gif" alt="Agent navigating dynamic environment" width="100%"/><br/>
-<sub>**Agent Learning Visualization:** Agent navigating to goal with trained policy </sub>
+<sub>**Agent Learning Visualization:** Agent navigating to goal with trained policy</sub>
 
-</td>
-</tr>
-</table>
+</div>
+
+</div>
+
+
 
 
 ## Installation
