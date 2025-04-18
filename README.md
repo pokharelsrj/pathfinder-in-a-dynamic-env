@@ -46,6 +46,9 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+### 4. (Optional) Train the model locally to personalize parameters
+
+### 5. (Express) Use the pre-trained model included in the repository if you would like to quickly run the project without waiting for the model to be trained.
 
 ## Environment Logic
 This environment simulates a grid-based navigation problem where an agent must reach a goal while avoiding walls. The environment features dynamic obstacles and stochastic transitions when collisions occur.
