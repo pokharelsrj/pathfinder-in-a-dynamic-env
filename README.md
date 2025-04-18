@@ -1,111 +1,209 @@
-# 🧠🕹️ MazeMaster: A Dynamic Grid World + Deep Reinforcement Learning Playground
+# Pathfinder Agent in Dynamic Environment
+This project focuses on developing a pathfinding agent capable of operating in **dynamic environments** such as forest fires, military operation zones, and construction sites. The agent is trained to adapt to real-time environmental changes, including moving obstacles and evolving hazards.
 
-**Survival of the Smartest.**  
-Welcome to **MazeMaster** – a dynamic, obstacle-ridden grid world where pathfinding meets chaos. This isn’t your average game—it's an evolving, AI-driven experiment testing the wit of agents trained through Q-learning and CNN . Whether you’re here to build, play, or train the next grid-exploring super-agent—**you’ve found the right maze.**
-
----
-
-## 🚀 Features at a Glance
-
-🧱 **Dynamic Obstacles**  
-Walls rearrange every few moves. Strategy today is dead tomorrow.
-
-💉 **Health Mechanics**  
-Bump into walls? It’ll cost you. Watch your agent go from Full → Injured → Critical.
-
-🎯 **Smart Goal Placement**  
-Randomized targets ensure no two episodes feel the same.
-
-🧠 **Reinforcement Learning Agents**  
-- 💾 Classic **Q-learning** with partial observability
-- 📦 CNN-powered agent with PyTorch
-- 🔍 Local state hashing and multi-channel observations
-
-👀 **Visualization FTW**  
-Pygame UI with animated bots, reward displays, particle effects & retro vibes.
-
----
-
-## 🧪 Core Modules
-
-| Module | Purpose |
-|--------|---------|
-| `mdp_gym.py` | Custom Gym environment with health, wall logic, rewards |
-| `vis_gym.py` | Pygame-powered environment visualization |
-| `MFMC.py` | Q-learning agent with partial observation support |
-| `CNN.py` | DQN agent with CNN architecture and experience replay |
-| `dynenv.py` | Variant environment with red/orange penalty zones |
-| `environment.py` | Early prototype with hard/soft wall logic |
-
----
-
-## 🧠 Agent Intelligence
-
-### ✅ Q-Learning (MFMC)
-- Local 3x3 grid hashed into stable state representation
-- Epsilon-decay exploration
-- Wall-aware decision making
-
-### 🧠 DQN (CNN.py)
-- 3-channel grid: walls, player, goal
-- CNN model trained via replay buffer & target network
-- Full TensorBoard logging and model checkpoints
-
----
-
-## 🕹️ How to Play
+A custom **OpenAI Gym environment** was developed to simulate these scenarios. We began with a basic **Q-learning** approach for initial experimentation and moved to a **Convolutional Deep Q-Network (DQN)** to enable scalability and performance in more complex settings.
 
 
-# For manual play (WASD controls)
-python vis_gym.py
+## Installation
+
+Follow these steps to set up the project locally:
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/pokharelsrj/pathfinder-in-a-dynamic-env
+cd pathfinder-dynamic-env
+```
+
+### 2. (Optional) Create a virtual environment
+
+```bash
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
 
 
+## Environment Logic
+This environment simulates a grid-based navigation problem where an agent must reach a goal while avoiding walls. The environment features dynamic obstacles and stochastic transitions when collisions occur.
 
-# Run Q-learning
-python MFMC.py
+### Grid Structure
+- The world is represented as a grid of cells
+- Each cell can be either empty, contain a wall, the agent, or the goal
+
+### Agent
+- Represented by a blue robot character
+- Can move in four directions: *Up, Down, Left, and Right*
+- Movement keys: *W (up), S (down), A (left), D (right)*
+
+### Goal
+- Represented by a red target icon
+- Reaching the goal provides a reward of *+10,000*
+
+### Walls
+- Represented by brown brick patterns
+- Hitting a wall results in a penalty of *-1000*
+- After hitting a wall, the agent is moved to a random adjacent cell
+- Walls randomize their positions every two moves, creating a dynamic environment
+
+### Action Space
+- Four discrete actions: Up, Down, Left, and Right
+
+### Reward Structure
+- Goal reached: +10,000
+- Wall collision: -1000
+- Other moves: No explicit reward/penalty
+
+## Challenge
+The main challenge in this environment is to navigate to the goal while avoiding walls that change positions periodically, requiring adaptive pathfinding strategies.
+
+## Implementation Notes
+This environment can be used to test various reinforcement learning algorithms, particularly those that can handle:
+- Discrete action spaces
+- Sparse rewards
+- Dynamic obstacles
+- Stochastic transitions
 
 
-# Train the DQN agent
-python CNN.py
+## Agent Intelligence
 
----
+### Q-Learning
+- Uses a **3×3 tunnel vision** around the agent, capturing local surroundings.
+- The **local view is hashed together with the goal position** to form the state representation.
+- Supports **randomized goal placement** in each episode to encourage generalization.
+- Implements **epsilon-greedy exploration** with decay.
 
-## 💡 Nerdy Nuggets
-
-- Grid size is customizable (currently 8x8)
-- Wall density ~30%
-- Partial observability via 3x3/5x5 windows
-- DQN supports both CPU, MPS, and CUDA backends
-- Particle celebration on goal reach 😎
-
----
-
-## 📂 Project Tree
+### Convolutional Deep Q-Network (C-DQN)
+- Processes a **3-channel full-grid input**: walls, agent location, and goal.
+- Learns via a **Convolutional Neural Network (CNN)**.
+- Trained using:
+  - **Experience replay** for efficient sample reuse.
+  - A **target network** to stabilize Q-value updates.
+- Includes **TensorBoard logging** and **checkpointing** for monitoring and reproducibility.
 
 
+## Usage
+
+### Q-Learning Agent
+
+```
+python q-learning/q-learning.py [options]
+```
+
+### Options
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--mode` | Operating mode: either `train` to train the agent or `play` to use a trained Q-table | `play` |
+| `--episodes` | Number of episodes for training or playing | `1000000` |
+| `--gui` | Enable graphical interface visualization | Disabled |
+| `--gamma` | Discount factor for future rewards in Q-learning algorithm | `0.9` |
+| `--epsilon` | Initial exploration rate (probability of taking a random action) | `1.0` |
+| `--decay_rate` | Rate at which exploration probability decays per episode | `0.999999` |
+| `--qtable` | Path to save or load the Q-table file | None |
+| `--fixed_goal` | Use a fixed goal position instead of random placement | Disabled |
+
+### Examples
+
+Train a new agent with GUI enabled:
+```
+python q-learning/q-learning.py --mode train --episodes 500000 --gui --qtable q-learning/trained_model/new_agent.pickle
+```
+
+Play with a pre-trained agent:
+```
+python q-learning/q-learning.py --mode play --qtable q-learning/trained_model/Q_table_random_goal.pickle --gui
+```
+
+Train with custom learning parameters:
+```
+python q-learning/q-learning.py --mode train --gamma 0.95 --epsilon 0.8 --decay_rate 0.9999
+```
+
+The Q-learning agent provides a tabular approach to reinforcement learning, while the CNN module implements a deep Q-network approach for more complex state spaces.
+
+
+### CNN-Based Deep Q-Network Agent
+
+
+```
+python cnn/CDQN.py [options]
+```
+
+### Options
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--mode` | Operating mode: either `train` to train the agent or `play` to use a trained model | `play` |
+| `--episodes` | Number of episodes for training or evaluation | `200` |
+| `--gui` | Enable graphical interface visualization | Disabled |
+| `--gamma` | Discount factor for future rewards | `0.9` |
+| `--epsilon_start` | Initial exploration rate | `1.0` |
+| `--epsilon_min` | Minimum exploration rate | `0.1` |
+| `--epsilon_decay` | Rate at which exploration probability decays | `0.9995` |
+| `--tau` | Target network update rate for soft updates | `0.005` |
+| `--lr` | Learning rate for neural network optimizer | `5e-4` |
+| `--batch_size` | Number of samples per batch for training | `64` |
+| `--replay_size` | Size of the experience replay buffer | `10000` |
+| `--log_dir` | Directory for storing training logs | None |
+| `--model_path` | Path to save or load the model | `cnn_dqn_model_20250404-234200.pth` |
+
+### Examples
+
+Train a new CNN-DQN agent:
+```
+python cnn/CDQN.py --mode train --episodes 1000 --gui --model_path cnn/trained_model/new_model.pth
+```
+
+Evaluate a pre-trained model:
+```
+python cnn/CDQN.py --mode play --gui --model_path cnn/trained_model/cnn_dqn_model_20250404-234200.pth
+```
+
+Train with custom hyperparameters:
+```
+python cnn/CDQN.py --mode train --gamma 0.95 --epsilon_start 0.9 --epsilon_min 0.05 --epsilon_decay 0.999 --lr 1e-4
+```
+
+
+The CNN-DQN approach offers enhanced capabilities for handling environments with complex visual inputs compared to the tabular Q-learning approach.
+
+
+## Project Tree
+
+```
 .
-├── mdp_gym.py       # Core Gym environment
-├── vis_gym.py       # Game visualization
-├── MFMC.py          # Q-learning loop
-├── CNN.py           # Deep Q-Learning with PyTorch
-├── dynenv.py        # Alternate env with refreshable obstacles
-├── environment.py   # Legacy version with hard/soft wall rules
-├── Q_table.pickle   # Trained Q-table (generated)
-└── .gitignore
+├── README.md
+├── cnn
+│   ├── CDQN.py
+│   ├── CDQNAgent.py
+│   ├── ReplayMemory.py
+│   ├── __init__.py
+│   └── trained_model
+│       └── cnn_dqn_model_20250404-234200.pth
+├── env
+│   ├── __init__.py
+│   ├── environment.py
+│   └── gui.py
+├── q-learning
+│   ├── __init__.py
+│   ├── q-learning.py
+│   └── trained_model
+│       ├── Q_table_fixed_goal.pickle
+│       └── Q_table_random_goal.pickle
+└── requirements.txt
+```
 
 
+## Agent Learning Visualization
+
+![Agent Learning Visualization](assets/agent_demo.gif)
+*Agent navigating to goal with trained policy*
 
 
-## 📈 Result Demos
-
-| 🎮 Episode | Reward Curve | Action Map |
-|-----------|---------------|------------|
-| ![goal](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdDkwMHN3b2dmc3ZxbjhzYTZ5emY4amtlczR6eWZyaHczbTgyNnM1dCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Ge86Xwnb0FGXmT4D6o/giphy.gif) | *(TensorBoard logs available)* | *(Coming Soon)* |
-
----
-
-## 📚 Credits & Nerds Behind the Code
-
-Crafted by a team obsessed with intelligent agents, reward hacks, and retro-style game design.  
-Drop us a 🌟 if you love robots learning how to escape unpredictable mazes.
 
