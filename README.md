@@ -50,6 +50,10 @@ pip install -r requirements.txt
 
 ### 5. (Express) Use the pre-trained model included in the repository if you would like to quickly run the project without waiting for the model to be trained.
 
+```bash
+cnn/trained_model/cnn_dqn_model_20250404-234200.pth
+```
+
 ## Environment Logic
 This environment simulates a grid-based navigation problem where an agent must reach a goal while avoiding walls. The environment features dynamic obstacles and stochastic transitions when collisions occur.
 
