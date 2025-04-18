@@ -1,189 +1,142 @@
 import hashlib
-import random
-import time
 import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 from vis_gym import *
 
-gui_flag = False  # Set to True to enable the game state visualization
+# --- ENVIRONMENT SETUP ---
+gui_flag = False
 setup(GUI=gui_flag)
-env = game  # Gym environment already initialized within vis_gym.py
+env = game
 
-
-# env.render()  # Uncomment to print game state info
-
-
-# def hash(obs):
-#     x, y = obs['player_position']
-#     h = obs['player_health']
-#     g = obs['wall_in_cell']
-#     if not g:
-#         g = 0
-#     else:
-#         g = int(g[-1])
-#
-#     return x * (5 * 2 * 5) + y * (2 * 5) + h * 5 + g
-
-def get_partial_observation(player_position, wall_positions, grid_size=5):
-    """
-    Extract a 5x5 grid around the player's position.
-    Walls are indicated with 1, free cells with 0.
-    Out-of-bound cells are marked with -1.
-
-    Args:
-        player_position (tuple): (x, y) coordinates of the player.
-        wall_positions (list or tuple): List of wall coordinate tuples.
-        grid_size (int): Size of the full grid (default=5).
-
-    Returns:
-        tuple: A tuple of 5 tuples (each of length 5) representing the local grid.
-    """
+# --- OBSERVATION UTILITIES ---
+def get_partial_observation(player_position, wall_positions, grid_size=8):
     x, y = player_position
-    local_grid = []
-    for i in range(x - 1, x + 2):  # generates: x-1, x, x+1
+    grid = []
+    for i in range(x - 1, x + 2):
         row = []
-        for j in range(y - 1, y + 2):  # generates: y-1, y, y+1
+        for j in range(y - 1, y + 2):
             if 0 <= i < grid_size and 0 <= j < grid_size:
                 row.append(1 if (i, j) in wall_positions else 0)
             else:
-                row.append(1)  # out-of-bound cells are marked with 1
-        local_grid.append(tuple(row))
-    return tuple(local_grid)
+                row.append(1)
+        grid.append(tuple(row))
+    return tuple(grid)
 
-
-# get_partial_observation((0, 0), [])
-
-
-def compute_partial_state_hash(player_position, wall_positions, grid_size=5):
-    """
-    Computes a stable hash for the 3x3 observation state around the agent.
-
-    Args:
-        player_position (tuple): The player's (x, y) position.
-        wall_positions (list or tuple): List of wall positions.
-        grid_size (int): Size of the full grid.
-
-    Returns:
-        str: A SHA256 hash hex digest representing the 3x3 observation state.
-    """
+def compute_partial_state_hash(player_position, wall_positions, grid_size):
     partial_obs = get_partial_observation(player_position, wall_positions, grid_size)
-
     state_representation = (partial_obs, env.goal_room)
     state_str = str(state_representation)
     return hashlib.sha256(state_str.encode('utf-8')).hexdigest()
 
+# --- EVALUATION & PLOTTING ---
+def evaluate_and_plot(q_table_path='Q_table.pickle',
+                      num_episodes=2000,
+                      ma_window=100):
+    # Load Q‑table
+    with open(q_table_path, 'rb') as f:
+        Q_table = pickle.load(f)
 
-# def Q_learning(num_episodes=200, gamma=0.9, epsilon=1, decay_rate=0.999):
-#     """
-#     Run Q-learning algorithm for a specified number of episodes.
-#
-#     Parameters:
-#     - num_episodes (int): Number of episodes to run.
-#     - gamma (float): Discount factor.
-#     - epsilon (float): Exploration rate.
-#     - decay_rate (float): Rate at which epsilon decays. Epsilon is decayed as epsilon = epsilon * decay_rate after each episode.
-#
-#     Returns:
-#     - Q_table (dict): Dictionary containing the Q-values for each state-action pair.
-#     """
-#     Q_table = {}
-#     number_of_updates = {}
-#
-#     current_ep = 0
-#     while current_ep != num_episodes:
-#         obs, reward, done, info = env.reset()
-#         total_rewards = 0
-#         no_of_moves = 0
-#         while not done:
-#             prev_state = compute_partial_state_hash(env.current_state['player_position'],
-#                                                     env.wall_positions,
-#                                                     env.grid_size)
-#             if Q_table.get(prev_state) is None or random.random() < epsilon:
-#                 action_to_take = random.choice(env.actions)
-#             else:
-#                 action_idx = np.argmax(Q_table[prev_state])
-#                 action_to_take = env.actions[action_idx]
-#
-#             obs, reward, done, info = env.step(action_to_take)
-#             total_rewards += reward
-#             state = compute_partial_state_hash(env.current_state['player_position'],
-#                                                env.wall_positions,
-#                                                env.grid_size)
-#             if gui_flag:
-#                 refresh(obs, reward, done, info)  # Update the game screen [GUI only]
-#
-#             action = info.get('action')
-#             index = env.actions.index(action)
-#
-#             if Q_table.get(state) is None:
-#                 Q_table.update({state: np.zeros(len(env.actions))})
-#
-#             if Q_table.get(prev_state) is None:
-#                 Q_table.update({prev_state: np.zeros(len(env.actions))})
-#
-#             if number_of_updates.get(state) is None:
-#                 number_of_updates.update({state: np.zeros(len(env.actions))})
-#
-#             if number_of_updates.get(prev_state) is None:
-#                 number_of_updates.update({prev_state: np.zeros(len(env.actions))})
-#
-#             Q_opt_prev = Q_table[prev_state][index]
-#             number_of_updates_prev = number_of_updates[prev_state][index]
-#
-#             eta = 1 / (1 + number_of_updates_prev)
-#             V_opt = np.max(Q_table[state])
-#
-#             Q_opt_curr = ((1 - eta) * Q_opt_prev) + eta * (reward + (gamma * V_opt))
-#
-#             Q_table[prev_state][index] = Q_opt_curr
-#             number_of_updates[prev_state][index] += 1
-#             no_of_moves += 1
-#
-#         print(current_ep, no_of_moves, total_rewards, epsilon)
-#
-#         current_ep = current_ep + 1
-#         epsilon = epsilon * decay_rate
-#
-#     return Q_table
-#
-#
-# decay_rate = 0.999999
-#
-# Q_table = Q_learning(num_episodes=1000000, gamma=0.9, epsilon=1, decay_rate=decay_rate)  # Run Q-learning
-#
-# # Save the Q-table dict to a file
-# with open('Q_table.pickle', 'wb') as handle:
-#     pickle.dump(Q_table, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    rewards = []
+    for ep in range(1, num_episodes + 1):
+        obs, _, done, _ = env.reset()
+        ep_reward = 0
+        while not done:
+            st = compute_partial_state_hash(
+                env.current_state['player_position'],
+                env.wall_positions,
+                env.grid_size
+            )
+            idx = np.argmax(Q_table.get(st, np.zeros(len(env.actions))))
+            action = env.actions[idx]
+            obs, r, done, _ = env.step(action)
+            ep_reward += r
+            if gui_flag:
+                refresh(obs, r, done, _)
+        rewards.append(ep_reward)
 
-'''
-Uncomment the code below to play an episode using the saved Q-table. Useful for debugging/visualization.
+        # occasional logging
+        if ep % 500 == 0 or ep == 1:
+            ma = np.mean(rewards[-ma_window:])
+            print(f"Episode {ep:4d}  Reward {ep_reward:6.2f}  {ma_window}-ep moving avg {ma:6.2f}")
 
-Comment before final submission or autograder may fail.
-'''
+    env.close()
 
-Q_table = np.load('Q_table.pickle', allow_pickle=True)
-print(len(Q_table))
-i = 0
-total_step = 0
-total_reward = 0
-while i != 5000:
-    obs, reward, done, info = env.reset()
-    while not done:
-        state = compute_partial_state_hash(env.current_state['player_position'],
-                                           env.wall_positions,
-                                           env.grid_size)
-        action_index = np.argmax(Q_table[state])
-        action = env.actions[action_index]
-        obs, reward, done, info = env.step(action)
-        total_reward += reward
-        total_step += 1
-        if gui_flag:
-            refresh(obs, reward, done, info)  # Update the game screen [GUI only]
-    i += 1
-    # print(i)
+    # Convert to array & compute stats
+    rewards = np.array(rewards)
+    mean_r, std_r, med_r = rewards.mean(), rewards.std(), np.median(rewards)
+    print(f"\nOverall (n={num_episodes}): μ={mean_r:.2f}, σ={std_r:.2f}, med={med_r:.2f}")
 
-print(total_reward / 5000)
-print(total_step/5000)
+    # Moving average (for curve)
+    if len(rewards) >= ma_window:
+        window = np.ones(ma_window) / ma_window
+        ma = np.convolve(rewards, window, mode='valid')
+        ma = np.concatenate([np.full(ma_window - 1, np.nan), ma])
+    else:
+        ma = np.full_like(rewards, np.nan)
 
-# Close the
-env.close()  # Close the environment
+    # Common styling kwargs
+    label_fs = 14
+    title_fs = 16
+    tick_fs = 12
+    line_lw = 2
+    grid_kw = dict(linestyle='--', alpha=0.5)
+
+    # 1) Reward curve + moving average + mean line, cropped to 1st–99th percentiles
+    low, high = np.percentile(rewards, [1, 99])
+    fig, ax = plt.subplots(figsize=(10, 4), dpi=300)
+    ax.plot(rewards, alpha=0.3, linewidth=1, label='Episode reward')
+    ax.plot(ma, linewidth=line_lw, label=f'{ma_window}-episode moving average')
+    ax.axhline(mean_r, linestyle='--', linewidth=1, label=f'Overall mean = {mean_r:.2f}')
+    ax.set_ylim(low, high)
+    ax.set_xlabel('Episode', fontsize=label_fs)
+    ax.set_ylabel('Total Reward', fontsize=label_fs)
+    ax.set_title(
+        f'Agent Performance Over Episodes\n(shown between {low:.0f} and {high:.0f})',
+        fontsize=title_fs
+    )
+    ax.legend(fontsize=label_fs)
+    ax.grid(**grid_kw)
+    ax.tick_params(axis='both', labelsize=tick_fs)
+    plt.tight_layout()
+    fig.savefig('reward_curve.png')
+    plt.show()
+
+    # 2) Histogram of rewards (clamp top 1%)
+    upper = np.percentile(rewards, 99)
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=300)
+    ax.hist(
+        np.clip(rewards, rewards.min(), upper),
+        bins=30,
+        alpha=0.7,
+        edgecolor='black'
+    )
+    ax.set_xlabel('Episode Total Reward', fontsize=label_fs)
+    ax.set_ylabel('Frequency', fontsize=label_fs)
+    ax.set_title('Distribution of Episode Rewards (clamped at 99th pct)', fontsize=title_fs)
+    ax.grid(**grid_kw)
+    ax.tick_params(labelsize=tick_fs)
+    plt.tight_layout()
+    fig.savefig('reward_histogram.png')
+    plt.show()
+
+    # 3) Boxplot of rewards (no fliers)
+    fig, ax = plt.subplots(figsize=(4, 6), dpi=300)
+    ax.boxplot(
+        rewards,
+        vert=True,
+        patch_artist=True,
+        boxprops=dict(facecolor='white', edgecolor='black'),
+        medianprops=dict(color='red', linewidth=2),
+        showfliers=False
+    )
+    ax.set_ylabel('Episode Total Reward', fontsize=label_fs)
+    ax.set_title('Boxplot of Episode Rewards (no fliers)', fontsize=title_fs)
+    ax.grid(axis='y', **grid_kw)
+    ax.tick_params(labelsize=tick_fs)
+    plt.tight_layout()
+    fig.savefig('reward_boxplot.png')
+    plt.show()
+
+if __name__ == "__main__":
+    evaluate_and_plot()
