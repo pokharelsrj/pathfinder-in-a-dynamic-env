@@ -217,6 +217,12 @@ The CNN-DQN approach offers enhanced capabilities for handling environments with
 └── requirements.txt
 ```
 
+## References
+
+1. https://rajagopalvenkat.com/teaching/lectures/neural_networks/#/16
+2. https://arxiv.org/pdf/2403.04807
+3. https://stevenschmatz.gitbooks.io/deep-reinforcement-learning/content/deep-q-networks.html
+
 
 
 
