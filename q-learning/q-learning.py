@@ -5,6 +5,8 @@ import pickle
 import numpy as np
 from env.gui import *
 
+# This code is part of the Q-learning agent approach that we initially tried (not recommended).
+# For our environment with visual state spaces (images/grids), we wouldn't use this because the Q-table would become impossibly large and sparse.
 
 class QLearningAgent:
     def __init__(self, gamma=0.9, epsilon=1.0,
