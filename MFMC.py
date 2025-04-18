@@ -33,6 +33,79 @@ def compute_partial_state_hash(player_position, wall_positions, grid_size):
 
 
 # --- EVALUATION & PLOTTING ---
+def evaluate_and_plot(q_table_path='Q_table.pickle',
+                      num_episodes=2000,
+                      ma_window=100):
+    # Load Q‑table
+    with open(q_table_path, 'rb') as f:
+        Q_table = pickle.load(f)
+
+    rewards = []
+    for ep in range(1, num_episodes + 1):
+        obs, _, done, _ = env.reset()
+        ep_reward = 0
+        while not done:
+            st = compute_partial_state_hash(
+                env.current_state['player_position'],
+                env.wall_positions,
+                env.grid_size
+            )
+            idx = np.argmax(Q_table.get(st, np.zeros(len(env.actions))))
+            action = env.actions[idx]
+            obs, r, done, _ = env.step(action)
+            ep_reward += r
+            if gui_flag:
+                refresh(obs, r, done, _)
+        rewards.append(ep_reward)
+
+        # occasional logging
+        if ep % 500 == 0 or ep == 1:
+            ma = np.mean(rewards[-ma_window:])
+            print(f"Episode {ep:4d}  Reward {ep_reward:6.2f}  {ma_window}-ep moving avg {ma:6.2f}")
+
+    env.close()
+
+    # Convert to array & compute stats
+    rewards = np.array(rewards)
+    mean_r, std_r, med_r = rewards.mean(), rewards.std(), np.median(rewards)
+    print(f"\nOverall (n={num_episodes}): μ={mean_r:.2f}, σ={std_r:.2f}, med={med_r:.2f}")
+
+    # Moving average (for curve)
+    if len(rewards) >= ma_window:
+        window = np.ones(ma_window) / ma_window
+        ma = np.convolve(rewards, window, mode='valid')
+        ma = np.concatenate([np.full(ma_window - 1, np.nan), ma])
+    else:
+        ma = np.full_like(rewards, np.nan)
+
+    # Common styling kwargs
+    label_fs = 14
+    title_fs = 16
+    tick_fs = 12
+    line_lw = 2
+    grid_kw = dict(linestyle='--', alpha=0.5)
+
+    # 1) Reward curve + moving average + mean line, cropped to 1st–99th percentiles
+    low, high = np.percentile(rewards, [1, 99])
+    fig, ax = plt.subplots(figsize=(10, 4), dpi=300)
+    ax.plot(rewards, alpha=0.3, linewidth=1, label='Episode reward')
+    # ax.plot(ma, linewidth=line_lw, label=f'{ma_window}-episode moving average')
+    ax.axhline(mean_r, color='red', linestyle='--', linewidth=1, label=f'Overall mean = {mean_r:.2f}')
+    ax.set_ylim(low, high)
+    ax.set_xlabel('Episode', fontsize=label_fs)
+    ax.set_ylabel('Total Reward', fontsize=label_fs)
+    ax.set_title(
+        f'Agent Performance Over Episodes',
+        fontsize=title_fs
+    )
+    ax.legend(fontsize=label_fs)
+    ax.grid(**grid_kw)
+    ax.tick_params(axis='both', labelsize=tick_fs)
+    plt.tight_layout()
+    fig.savefig('reward_curve.png')
+    plt.show()
+
+
 def evaluate_and_plot_steps(q_table_path='Q_table.pickle',
                             num_episodes=2000,
                             ma_window=100):
@@ -118,4 +191,5 @@ def evaluate_and_plot_steps(q_table_path='Q_table.pickle',
 
 
 if __name__ == "__main__":
+    evaluate_and_plot()
     evaluate_and_plot_steps()
