@@ -78,7 +78,7 @@ This environment simulates a grid-based navigation problem where an agent must r
 - Other moves: No explicit reward/penalty
 
 ## Challenge
-The main challenge in this environment is to navigate to the goal while avoiding walls that change positions periodically, requiring adaptive pathfinding strategies.
+The main challenge in this environment is to navigate to the goal while avoiding walls that change positions periodically, requiring adaptive pathfinding strategies. Maximizing reward score was the main objective for our agent.
 
 ## Implementation Notes
 This environment can be used to test various reinforcement learning algorithms, particularly those that can handle:
